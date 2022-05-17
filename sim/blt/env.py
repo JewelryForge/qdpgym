@@ -72,6 +72,10 @@ class QuadrupedEnvBt(Environment):
         return self._sim_env
 
     @property
+    def render_mode(self):
+        return self._render
+
+    @property
     def arena(self):
         return self._arena
 

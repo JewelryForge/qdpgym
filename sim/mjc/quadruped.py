@@ -198,14 +198,13 @@ class AliengoModelMj(base.Walker):
 
 
 class AliengoMj(Quadruped):
-    INIT_HEIGHT = 0.43
     LINK_LENGTHS = (0.083, 0.25, 0.25)
     HIP_OFFSETS = ((0.2399, -0.051, 0.), (0.2399, 0.051, 0.),
                    (-0.2399, -0.051, 0), (-0.2399, 0.051, 0.))
     FOOT_RADIUS = 0.0265
     ROBOT_SIZE = ((-0.325, 0.325), (-0.155, 0.155))
 
-    STANCE_HEIGHT = 0.4
+    STANCE_HEIGHT = 0.43
     STANCE_CONFIG = (0., 0.6435, -1.287) * 4
     STANCE_FOOT_POSITIONS = ((0., 0., -STANCE_HEIGHT),) * 4
     JOINT_LIMITS = ((-1.22, 1.22), (None, None), (-2.77, -0.7)) * 4
@@ -375,10 +374,10 @@ class AliengoMj(Quadruped):
         return self._state.gyro
 
     def get_state_history(self, latency: float):
-        return ut.get_padded(self._state_history, -int(latency / self._freq) - 1)
+        return ut.get_padded(self._state_history, -int(latency * self._freq) - 1)
 
     def get_cmd_history(self, latency: float):
-        return ut.get_padded(self._cmd_history, -int(latency / self._freq) - 1)
+        return ut.get_padded(self._cmd_history, -int(latency * self._freq) - 1)
 
     def get_torso_contact(self):
         return self._state.torso_contact

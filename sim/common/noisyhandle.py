@@ -101,7 +101,7 @@ class NoisyHandle(QuadrupedHandle):
         return self._robot.get_last_torque()
 
     def get_state_history(self, latency):
-        return ut.get_padded(self._obs_history, -int(latency / self._freq) - 1)
+        return ut.get_padded(self._obs_history, -int(latency * self._freq) - 1)
 
     def get_cmd_history(self, latency):
         return self._robot.get_cmd_history(latency)

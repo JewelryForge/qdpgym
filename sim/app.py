@@ -25,8 +25,6 @@ class Application(object):
                 actions = self.policy(obs.observation)
                 for callback in self.callbacks:
                     callback(self.task, self.robot, self.env)
-                with MfTimer() as t:
-                    obs = self.env.step(actions)
-                print(t.time_spent)
+                obs = self.env.step(actions)
                 if obs.status == StepType.FAIL and allow_reset:
                     self.env.init_episode()

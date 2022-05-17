@@ -37,7 +37,9 @@ class Angle(object):
     @staticmethod
     def mean(lst: Sequence[float]):
         _sum = last = lst[0]
-        for a in lst[1:]:
+        for i, a in enumerate(lst):
+            if i == 0:
+                continue
             last = Angle.near(last, a)
             _sum += last
         return Angle.norm(_sum / len(lst))
@@ -49,6 +51,10 @@ class Angle(object):
         elif x < y - PI:
             y -= TAU
         return y
+
+    @staticmethod
+    def to_deg(rad):
+        return rad / math.pi * 180
 
 
 def get_padded(queue: Sequence, idx):

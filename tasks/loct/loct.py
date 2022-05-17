@@ -28,7 +28,6 @@ class LocomotionBase(BasicTask):
         self._traj_gen = TgStateMachine(env.timestep * env.num_substeps,
                                         random_state, vertical_tg(0.12))
         self._build_weights_and_bias()
-        env.set_perturbation((0., 10., 0., 0., 0., 0.))
 
     def before_step(self, action):
         action = super().before_step(action)
