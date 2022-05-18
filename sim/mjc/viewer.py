@@ -30,11 +30,13 @@ class ViewerMj:
         self._render_every_frame = False
         self._image_idx = 0
         self._image_path = "/tmp/frame_%07d.png"
-        self._time_per_render = 1 / 60.0
+        self._render_time = 1 / 60.0
         self._run_speed = 1.0
         self._loop_count = 0
         self._advance_by_one_step = False
         self._hide_menu = False
+        self._step_start = None
+        self._step_time = self.model.opt.timestep
 
         # glfw init
         glfw.init()
@@ -408,7 +410,8 @@ class ViewerMj:
             add_overlay(topleft, "Cap[t]ure frame", "")
         add_overlay(topleft, "Toggle geomgroup visibility", "0-4")
 
-        add_overlay(bottomleft, "FPS", "%d%s" % (1 / self._time_per_render, ""))
+        fps = max((1 - self._step_time * self._run_speed / self.model.opt.timestep) / self._render_time, 20)
+        add_overlay(bottomleft, "FPS", "%d%s" % (fps, ""))
         add_overlay(bottomleft, "Solver iterations", str(self.data.solver_iter + 1))
         add_overlay(bottomleft, "Step", str(round(self.data.time / self.model.opt.timestep)))
         add_overlay(bottomleft, "timestep", "%.5f" % self.model.opt.timestep)
@@ -423,8 +426,6 @@ class ViewerMj:
         def update():
             # fill overlay items
             self._create_overlay()
-
-            render_start = time.time()
             if self.window is None:
                 return
             elif glfw.window_should_close(self.window):
@@ -459,8 +460,6 @@ class ViewerMj:
                             self.ctx)
                 glfw.swap_buffers(self.window)
             glfw.poll_events()
-            self._time_per_render = 0.9 * self._time_per_render + \
-                                    0.1 * (time.time() - render_start)
 
             # clear overlay
             self._overlay.clear()
@@ -472,19 +471,27 @@ class ViewerMj:
                     self._advance_by_one_step = False
                     break
         else:
-            self._loop_count += self.model.opt.timestep / \
-                                (self._time_per_render * self._run_speed)
+            timestep = self.model.opt.timestep / self._run_speed
+            if self._step_start is not None:
+                self._step_time = self._step_time * 0.98 + (time.time() - self._step_start) * 0.02
+                self._loop_count += max((timestep - self._step_time) / self._render_time, 0.05)
+            else:
+                self._loop_count = 1
             if self._render_every_frame:
                 self._loop_count = 1
-            while self._loop_count > 0:
+            if self._loop_count >= 1:
+                render_start = time.time()
                 update()
+
+                # clear markers
+                self._markers.clear()
+
+                # apply perturbation (should this come before mj_step?)
+                self.apply_perturbations()
+                render_time = time.time() - render_start
                 self._loop_count -= 1
-
-        # clear markers
-        self._markers[:] = []
-
-        # apply perturbation (should this come before mj_step?)
-        self.apply_perturbations()
+                self._render_time = self._render_time * 0.98 + render_time * 0.02
+            self._step_start = time.time()
 
     def close(self):
         glfw.terminate()
