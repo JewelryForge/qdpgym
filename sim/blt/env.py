@@ -57,6 +57,8 @@ class QuadrupedEnvBt(Environment):
             self._robot.update_observation(None, minimal=True)
             self._robot.apply_command(self._robot.STANCE_CONFIG)
             self._sim_env.stepSimulation()
+
+        self._action_history.append(np.array(self._robot.STANCE_CONFIG))
         self._robot.update_observation(self._random)
         return TimeStep(
             StepType.INIT,
@@ -81,7 +83,7 @@ class QuadrupedEnvBt(Environment):
 
     @property
     def action_history(self):
-        return PadWrapper(self._action_history, self._robot.STANCE_CONFIG)
+        return PadWrapper(self._action_history)
 
     @property
     def sim_time(self):
@@ -98,12 +100,8 @@ class QuadrupedEnvBt(Environment):
     def step(self, action: ARRAY_LIKE):
         action = self._task.before_step(action)
         action = np.asarray(action)
+        prev_action = self._action_history[-1]
         self._action_history.append(action)
-        if self._action_history:
-            prev_action = self._action_history[-1]
-        else:
-            prev_action = np.array(self._robot.STANCE_CONFIG)
-
         for i in range(self._num_substeps):
             weight = (i + 1) / self._num_substeps
             current_action = action * weight + prev_action * (1 - weight)

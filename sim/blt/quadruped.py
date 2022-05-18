@@ -25,7 +25,7 @@ class AliengoBt(Quadruped):
 
     STANCE_HEIGHT = 0.43
     STANCE_CONFIG = (0., 0.6435, -1.287) * 4
-    STANCE_FOOT_POSITIONS = ((0., 0., -STANCE_HEIGHT),) * 4
+    STANCE_FOOT_POSITIONS = ((0., 0., -0.4),) * 4
     JOINT_LIMITS = ((-1.22, 1.22), (None, None), (-2.77, -0.7)) * 4
     TORQUE_LIMITS = 44.4
 
@@ -242,6 +242,9 @@ class AliengoBt(Quadruped):
 
     def get_leg_contacts(self):
         return self._state.leg_contacts
+
+    def get_foot_pos(self):
+        return self._state.foot_pos
 
     def get_foot_contacts(self):
         return self._state.leg_contacts[((2, 5, 8, 11),)]

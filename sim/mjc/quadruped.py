@@ -206,7 +206,7 @@ class AliengoMj(Quadruped):
 
     STANCE_HEIGHT = 0.43
     STANCE_CONFIG = (0., 0.6435, -1.287) * 4
-    STANCE_FOOT_POSITIONS = ((0., 0., -STANCE_HEIGHT),) * 4
+    STANCE_FOOT_POSITIONS = ((0., 0., -0.4),) * 4
     JOINT_LIMITS = ((-1.22, 1.22), (None, None), (-2.77, -0.7)) * 4
     TORQUE_LIMITS = 44.4
 

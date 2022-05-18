@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import numpy as np
@@ -65,7 +66,7 @@ class LocomotionBase(BasicTask):
 
         joint_err = n.get_last_command() - n.get_joint_pos()
         state1, state2 = n.get_state_history(0.01), n.get_state_history(0.02)
-        cmd1, cmd2 = n.get_cmd_history(0.01).command, n.get_cmd_history(0.01).command
+        cmd1, cmd2 = n.get_cmd_history(0.01).command, n.get_cmd_history(0.02).command
         joint_proc_err = np.concatenate((cmd1 - state1.joint_pos, cmd2 - state2.joint_pos))
         joint_proc_vel = np.concatenate((state1.joint_vel, state2.joint_vel))
         terrain_info = self._collect_terrain_info()
@@ -100,7 +101,16 @@ class LocomotionBase(BasicTask):
         )) - self._bias) * self._weights
 
     def _collect_terrain_info(self):
-        return np.zeros(36 + 8)
+        yaw = self._robot.get_base_rpy()[2]
+        dx, dy = 0.1 * math.cos(yaw), 0.1 * math.sin(yaw)
+        points = ((dx - dy, dx + dy), (dx, dy), (dx + dy, -dx + dy),
+                  (-dy, dx), (0, 0), (dy, -dx),
+                  (-dx - dy, dx - dy), (-dx, -dy), (-dx + dy, -dx - dy))
+        samples = []
+        for x, y, z in self._robot.get_foot_pos():
+            for px, py in points:
+                samples.append(z - self._env.arena.get_height(x + px, y + py))
+        return np.concatenate((samples, np.zeros(8)))
 
     def _build_weights_and_bias(self):
         self._weights = np.concatenate((

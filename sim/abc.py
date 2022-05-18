@@ -60,6 +60,9 @@ class QuadrupedHandle(metaclass=abc.ABCMeta):
     def get_leg_contacts(self):
         raise NotImplementedError
 
+    def get_foot_pos(self):
+        raise NotImplementedError
+
     def get_foot_contacts(self):
         raise NotImplementedError
 
@@ -197,6 +200,9 @@ class Environment(metaclass=abc.ABCMeta):
 
 
 class Hook(metaclass=abc.ABCMeta):
+    def initialize(self, robot, env):
+        pass
+
     def initialize_episode(self, robot, env):
         pass
 
@@ -244,7 +250,7 @@ class Task(metaclass=abc.ABCMeta):
     def register_env(self, robot: Quadruped, env: Environment, random_state):
         raise NotImplementedError
 
-    def add_hook(self, hook: Hook):
+    def add_hook(self, hook: Hook, name=None):
         raise NotImplementedError
 
     def get_observation(self):

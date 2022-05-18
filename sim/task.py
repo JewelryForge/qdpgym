@@ -12,14 +12,23 @@ class NullTask(Task):
         self._env: Optional[Environment] = None
         self._random = None
         self._hooks = []
+        self._hook_names = set()
+        self._options = []
 
     def register_env(self, robot, env, random_state):
         self._robot = robot
         self._env = env
         self._random = random_state
+        for hook in self._hooks:
+            hook.initialize(self._robot, self._env)
 
-    def add_hook(self, hook: Hook):
+    def add_hook(self, hook: Hook, name=None):
         self._hooks.append(hook)
+        if name is None:
+            name = hook.__class__.__name__
+        if name in self._hook_names:
+            raise ValueError(f'Duplicated Hook `{name}`')
+        self._hook_names.add(name)
         return self
 
     def get_observation(self):
@@ -91,8 +100,8 @@ class RewardRegistry(object):
 
     def report(self):
         from qdpgym.utils import colored_str
-        print(colored_str(f'Got {len(self._rewards_weights)} types of rewards:', 'white'))
-        print(f"{'Reward Type':<28}Weight * {self._coefficient:.3f}")
+        print(colored_str(f'Got {len(self._rewards_weights)} types of rewards:\n', 'white'),
+              f"{'Reward Type':<28}Weight * {self._coefficient:.3f}", sep='')
         for reward, weight in self._rewards_weights:
             reward_name: str = reward.__class__.__name__
             length = len(reward_name)

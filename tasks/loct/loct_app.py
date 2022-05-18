@@ -13,7 +13,7 @@ __all__ = ['LocomotionAppMj', 'LocomotionAppBt']
 
 
 class GamepadCommander(object):
-    def __init__(self, gamepad_type='PS4'):
+    def __init__(self, gamepad_type='Xbox'):
         from qdpgym.thirdparty.gamepad import gamepad, controllers
         if not gamepad.available():
             log.warn('Please connect your gamepad...')
@@ -48,7 +48,7 @@ class GamepadCommander(object):
 
 
 class LocomotionAppMj(Application):
-    def __init__(self, model_path, gamepad='PS4'):
+    def __init__(self, model_path, gamepad='Xbox'):
         from qdpgym.sim.mjc.env import QuadrupedEnvMj
         from qdpgym.sim.mjc.hooks import ViewerMjHook
         from qdpgym.sim.mjc.quadruped import AliengoMj
@@ -60,6 +60,7 @@ class LocomotionAppMj(Application):
         task = LocomotionBase().add_hook(ViewerMjHook())
         env = QuadrupedEnvMj(robot, arena, task)
         network = Actor(78, 133, 12, (72, 64), (), (512, 256, 128)).to('cuda')
+        log.info(f'Loading model {model_path}')
         model_info = torch.load(model_path)
         network.load_state_dict(model_info['actor_state_dict'])
         policy = lambda obs: network.policy(obs) * np.array((0.2, 0.2, 0.1) * 4)
@@ -69,7 +70,7 @@ class LocomotionAppMj(Application):
 
 
 class LocomotionAppBt(Application):
-    def __init__(self, model_path, gamepad='PS4'):
+    def __init__(self, model_path, gamepad='Xbox'):
         from qdpgym.sim.blt.env import QuadrupedEnvBt
         from qdpgym.sim.blt.quadruped import AliengoBt
         from qdpgym.sim.blt.terrain import PlainBt
@@ -79,8 +80,8 @@ class LocomotionAppBt(Application):
         arena = PlainBt()
         task = LocomotionBase().add_hook(ViewerBtHook())
         env = QuadrupedEnvBt(robot, arena, task)
-        env.set_render(True)
         network = Actor(78, 133, 12, (72, 64), (), (512, 256, 128)).to('cuda')
+        log.info(f'Loading model {model_path}')
         model_info = torch.load(model_path)
         network.load_state_dict(model_info['actor_state_dict'])
         policy = lambda obs: network.policy(obs) * np.array((0.2, 0.2, 0.1) * 4)

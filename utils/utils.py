@@ -71,18 +71,21 @@ def get_padded(queue: Sequence, idx):
 
 
 class PadWrapper(object):
-    def __init__(self, seq: Sequence, default=None):
+    def __init__(self, seq: Sequence):
         self.seq = seq
-        self.default = default
         self.is_empty = not self.seq
 
     def __getitem__(self, item):
         if self.is_empty:
-            if self.default is None:
-                raise IndexError('Empty Sequence')
-            return self.default
+            raise IndexError('Empty Sequence')
         else:
             return get_padded(self.seq, item)
+
+    def __len__(self):
+        return len(self.seq)
+
+    def __repr__(self):
+        return f'PadWrapper[{self.seq}]'
 
 
 def replace_is(seq: list, src, dst):

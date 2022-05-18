@@ -46,6 +46,7 @@ class QuadrupedEnvMj(Environment):
             self._robot.update_observation(None, True)
             self._robot.apply_command(self._robot.STANCE_CONFIG)
             self._physics.step()
+        self._action_history.append(np.array(self._robot.STANCE_CONFIG))
         self._physics.data.ptr.time = 0.
         self._robot.update_observation(self._random)
         return TimeStep(
@@ -67,7 +68,7 @@ class QuadrupedEnvMj(Environment):
 
     @property
     def action_history(self):
-        return PadWrapper(self._action_history, self._robot.STANCE_CONFIG)
+        return PadWrapper(self._action_history)
 
     @property
     def sim_time(self):
@@ -84,12 +85,9 @@ class QuadrupedEnvMj(Environment):
     def step(self, action: ARRAY_LIKE):
         action = self._task.before_step(action)
         action = np.asarray(action)
-        self._action_history.append(action)
-        if self._action_history:
-            prev_action = self._action_history[-1]
-        else:
-            prev_action = np.array(self._robot.STANCE_CONFIG)
+        prev_action = np.array(self._robot.STANCE_CONFIG)
 
+        self._action_history.append(action)
         for i in range(self._num_substeps):
             weight = (i + 1) / self._num_substeps
             current_action = action * weight + prev_action * (1 - weight)

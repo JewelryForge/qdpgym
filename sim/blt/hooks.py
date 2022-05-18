@@ -22,6 +22,9 @@ class ViewerBtHook(Hook):
 
         self._last_frame_time = time.time()
 
+    def initialize(self, robot, env):
+        env.set_render()
+
     def initialize_episode(self, robot, env):
         if self._pre_vis:
             return
@@ -58,11 +61,10 @@ class ViewerBtHook(Hook):
             if sleep_time > 0:
                 time.sleep(sleep_time)
         self._last_frame_time = time.time()
+        kbd_events = pyb.getKeyboardEvents()
 
         if self._moving_cam:
-            keys = pyb.getKeyboardEvents()
-            switch_cam = ord('`')
-            if switch_cam in keys and keys[switch_cam] & pyb.KEY_WAS_TRIGGERED:
+            if self.is_triggered(ord('`'), kbd_events):
                 self._cam_state = (self._cam_state + 1) % 6
 
             x, y, _ = robot.get_base_pos()
@@ -74,11 +76,24 @@ class ViewerBtHook(Hook):
                 self._robot_yaw_filter.append(robot.get_base_rpy()[2] - math.pi / 2)
                 # To avoid carsick :)
                 mean = Angle.mean(self._robot_yaw_filter)
-                if self._cam_state == 2:
+                if self._cam_state == 2:  # around robot
                     mean = Angle.norm(mean + math.pi / 2)
                 elif self._cam_state == 3:
                     mean = Angle.norm(mean + math.pi)
                 elif self._cam_state == 4:
                     mean = Angle.norm(mean - math.pi / 2)
-                sim_env.resetDebugVisualizerCamera(1.5, Angle.to_deg(mean), -20., (x, y, z))
+                sim_env.resetDebugVisualizerCamera(1.5, Angle.to_deg(mean), -30., (x, y, z))
             env.sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SINGLE_STEP_RENDERING, True)
+
+        KEY_SPACE = ord(' ')
+        if self.is_triggered(KEY_SPACE, kbd_events):
+            while True:  # PAUSE
+                env.sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SINGLE_STEP_RENDERING, True)
+                time.sleep(0.01)
+                if self.is_triggered(KEY_SPACE, pyb.getKeyboardEvents()):
+                    self._cam_state = 0
+                    break
+
+    @staticmethod
+    def is_triggered(key, keyboard_events):
+        return key in keyboard_events and keyboard_events[key] & pyb.KEY_WAS_TRIGGERED
