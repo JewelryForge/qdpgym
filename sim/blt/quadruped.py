@@ -16,6 +16,97 @@ from qdpgym.sim.common.motor import PdMotorSim, ActuatorNetWithHistorySim
 from qdpgym.sim.common.noisyhandle import NoisyHandle
 
 
+class AliengoModelBt(object):
+    MODEL_PATH = 'aliengo/model/aliengo.urdf'
+
+    LEG_NAMES = ('FR', 'FL', 'RR', 'RL')
+    JOINT_TYPES = ('hip', 'thigh', 'calf', 'foot')
+    JOINT_SUFFIX = ('joint', 'joint', 'joint', 'fixed')
+
+    def __init__(self):
+        self._body_id: int = -1
+        self._num_joints: int = 0
+        self._joint_names: Optional[List[str, ...]] = None
+        self._joint_ids: Optional[List[int]] = None
+        self._motor_ids: Optional[List[int]] = None
+        self._foot_ids: Optional[List[int]] = None
+
+        self._base_dyn: Optional[DynamicsInfo] = None
+        self._leg_dyns: Optional[List[DynamicsInfo]] = None
+        self._mass: Optional[float] = None
+
+    @property
+    def motor_ids(self):
+        return self._motor_ids
+
+    @property
+    def mass(self):
+        return self._mass
+
+    @property
+    def foot_ids(self):
+        return self._foot_ids
+
+    def spawn(self, sim_env, init_pose):
+        model_path = os.path.join(rsc_dir, self.MODEL_PATH)
+        self._body_id = sim_env.loadURDF(model_path, *init_pose)  # , flags=flags)
+        self._num_joints = sim_env.getNumJoints(self._body_id)
+        self._joint_names = ['_'.join((leg, j, s)) for leg in self.LEG_NAMES
+                             for j, s in zip(self.JOINT_TYPES, self.JOINT_SUFFIX)]
+
+        joint_name_to_id = {}
+        for i in range(sim_env.getNumJoints(self._body_id)):
+            joint_info = sim_env.getJointInfo(self._body_id, i)
+            joint_name_to_id[joint_info[1].decode("UTF-8")] = joint_info[0]
+        self._joint_ids = [joint_name_to_id.get(n, -1) for n in self._joint_names]
+        self._motor_ids = [self._get_joint_id(leg, j) for leg in range(4) for j in range(3)]
+        self._foot_ids = [self._get_joint_id(leg, -1) for leg in range(4)]
+        sim_env.setPhysicsEngineParameter(enableConeFriction=0)
+        for foot_id in self._foot_ids:
+            sim_env.enableJointForceTorqueSensor(self._body_id, foot_id, True)
+
+        self._base_dyn = DynamicsInfo(sim_env.getDynamicsInfo(self._body_id, 0))
+        self._leg_dyns = [DynamicsInfo(sim_env.getDynamicsInfo(self._body_id, i))
+                          for i in self._motor_ids[:3]]
+        return self._body_id, self._motor_ids, self._foot_ids
+
+    def init_episode_dynamics(self, sim_env, random_state=None):
+        def _change_dyn(_link_id, *args, **kwargs):
+            sim_env.changeDynamics(self._body_id, _link_id, *args, **kwargs)
+
+        if random_state is None:
+            for link_id in self._foot_ids:
+                _change_dyn(link_id, lateralFriction=1.0, spinningFriction=0.2)
+        else:
+            base_mass = self._base_dyn.mass * random_state.uniform(0.8, 1.2)
+            base_inertia = self._base_dyn.inertia * random_state.uniform(0.8, 1.2, 3)
+            _change_dyn(0, mass=base_mass, localInertiaDiagonal=base_inertia)
+
+            leg_masses, leg_inertia = [], []
+            for _ in range(4):
+                for leg_dyn in self._leg_dyns:
+                    leg_masses.append(leg_dyn.mass * random_state.uniform(0.8, 1.2))
+                    leg_inertia.append(leg_dyn.inertia * random_state.uniform(0.8, 1.2, 3))
+            for link_id, mass, inertia in zip(self._motor_ids, leg_masses, leg_inertia):
+                _change_dyn(link_id, mass=mass, localInertiaDiagonal=inertia)
+
+            for link_id, fric in zip(self._foot_ids, random_state.uniform(0.4, 1.0, 4)):
+                _change_dyn(link_id, lateralFriction=fric, spinningFriction=0.2)
+
+        for link_id in self._motor_ids:
+            _change_dyn(link_id, linearDamping=0, angularDamping=0)
+        sim_env.setJointMotorControlArray(self._body_id, self._motor_ids,
+                                          pyb.VELOCITY_CONTROL, forces=(0.025,) * 12)
+
+        self._mass = sum([sim_env.getDynamicsInfo(self._body_id, i)[0]
+                          for i in range(self._num_joints)])
+
+    def _get_joint_id(self, leg: Union[int, str], joint_type: Union[int, str] = 0):
+        if joint_type < 0:
+            joint_type += 4
+        return self._joint_ids[leg * 4 + joint_type]
+
+
 class AliengoBt(Quadruped):
     LINK_LENGTHS = (0.083, 0.25, 0.25)
     HIP_OFFSETS = ((0.2399, -0.051, 0.), (0.2399, 0.051, 0.),
@@ -29,12 +120,6 @@ class AliengoBt(Quadruped):
     JOINT_LIMITS = ((-1.22, 1.22), (None, None), (-2.77, -0.7)) * 4
     TORQUE_LIMITS = 44.4
 
-    LEG_NAMES = ('FR', 'FL', 'RR', 'RL')
-    JOINT_TYPES = ('hip', 'thigh', 'calf', 'foot')
-    JOINT_SUFFIX = ('joint', 'joint', 'joint', 'fixed')
-
-    MODEL_PATH = 'aliengo/model/aliengo.urdf'
-
     def __init__(self, frequency: int, motor: str, noisy=True):
         self._freq = frequency
         if motor == 'pd':
@@ -44,12 +129,16 @@ class AliengoBt(Quadruped):
             self._motor.load_params(os.path.join(rsc_dir, 'actuator_net_with_history.pt'))
         else:
             raise NotImplementedError
-        self._noisy_on = noisy
-
         self._motor.set_joint_limits(*zip(*self.JOINT_LIMITS))
         self._motor.set_torque_limits(self.TORQUE_LIMITS)
+        self._noisy_on = noisy
+
         self._sim_env = None if False else pyb
-        self._body_id = None
+        self._body_id = -1
+        self._motor_ids: Optional[List[int]] = None
+        self._foot_ids: Optional[List[int]] = None
+        self._model = AliengoModelBt()
+
         self._noisy: Optional[NoisyHandle] = None
         if self._noisy_on:
             self._noisy = NoisyHandle(self, frequency)
@@ -59,13 +148,9 @@ class AliengoBt(Quadruped):
         self._cmd: Optional[Command] = None
         self._cmd_history: Deque[Command] = collections.deque(maxlen=100)
 
+        self._init_pose = ((0., 0., self.STANCE_HEIGHT), (0., 0., 0., 1.))
         self._random_dynamics = False
         self._latency_range = None
-
-        self._init_pose = ((0., 0., self.STANCE_HEIGHT), (0., 0., 0., 1.))
-        self._base_dynamics: Optional[DynamicsInfo] = None
-        self._leg_dynamics: Optional[List[DynamicsInfo]] = None
-        self._mass: Optional[float] = None
 
     @property
     def noisy(self) -> QuadrupedHandle:
@@ -90,47 +175,19 @@ class AliengoBt(Quadruped):
         self._sim_env = sim_env
 
         # flags = pyb.URDF_USE_SELF_COLLISION if self._self_collision else 0
-        model_path = os.path.join(rsc_dir, self.MODEL_PATH)
-        self._body_id = self._sim_env.loadURDF(model_path, *self._init_pose)  # , flags=flags)
-        self._analyse_model_joints()
+        if self._body_id == -1:
+            self._body_id, self._motor_ids, self._foot_ids = \
+                self._model.spawn(self._sim_env, self._init_pose)
+        if self._random_dynamics:
+            self._model.init_episode_dynamics(sim_env, random_state)
+        else:
+            self._model.init_episode_dynamics(sim_env)
 
         if cfg is None:
             cfg = self.STANCE_CONFIG
         self._configure_joints(cfg)
         if self._noisy_on and self._latency_range is not None:
             self._noisy.latency = random_state.uniform(*self._latency_range)
-
-        """Set sensors and get dynamics info from pybullet"""
-        self._sim_env.setPhysicsEngineParameter(enableConeFriction=0)
-        for leg in range(4):
-            self._sim_env.enableJointForceTorqueSensor(self._body_id, self._get_joint_id(leg, 3), True)
-        self._base_dynamics = DynamicsInfo(self._sim_env.getDynamicsInfo(self._body_id, 0))
-        self._leg_dynamics = [DynamicsInfo(self._sim_env.getDynamicsInfo(self._body_id, i))
-                              for i in self._motor_ids[:3]]
-        if not self._random_dynamics:
-            for link_id in self._foot_ids:
-                self._sim_env.changeDynamics(self._body_id, link_id, lateralFriction=1.0,
-                                             spinningFriction=0.2)
-        else:
-            base_mass = self._base_dynamics.mass * random_state.uniform(0.8, 1.2)
-            base_inertia = self._base_dynamics.inertia * random_state.uniform(0.8, 1.2, 3)
-            leg_masses, leg_inertia = zip(*[(leg_dyn.mass * random_state.uniform(0.8, 1.2),
-                                             leg_dyn.inertia * random_state.uniform(0.8, 1.2, 3))
-                                            for _ in range(4) for leg_dyn in self._leg_dynamics])
-
-            self._sim_env.changeDynamics(self._body_id, 0, mass=base_mass, localInertiaDiagonal=base_inertia)
-            for link_id, mass, inertia in zip(self._motor_ids, leg_masses, leg_inertia):
-                self._sim_env.changeDynamics(self._body_id, link_id, mass=mass, localInertiaDiagonal=inertia)
-            for link_id, fric in zip(self._foot_ids, random_state.uniform(0.4, 1.0, 4)):
-                self._sim_env.changeDynamics(self._body_id, link_id, lateralFriction=fric,
-                                             spinningFriction=0.2)
-
-        for link_id in self._motor_ids:
-            self._sim_env.changeDynamics(self._body_id, link_id, linearDamping=0, angularDamping=0)
-        self._sim_env.setJointMotorControlArray(self._body_id, self._motor_ids,
-                                                pyb.VELOCITY_CONTROL, forces=(0.025,) * 12)
-        self._mass = sum([self._sim_env.getDynamicsInfo(self._body_id, i)[0]
-                          for i in range(self._num_joints)])
 
     def update_observation(self, random_state, minimal=False):
         """Get robot states from pybullet"""
@@ -267,27 +324,9 @@ class AliengoBt(Quadruped):
     def get_last_torque(self) -> np.ndarray:
         return self._cmd.torque if self._cmd is not None else None
 
-    def _analyse_model_joints(self):
-        self._num_joints = self._sim_env.getNumJoints(self._body_id)
-        self._joint_names = ['_'.join((leg, j, s)) for leg in self.LEG_NAMES
-                             for j, s in zip(self.JOINT_TYPES, self.JOINT_SUFFIX)]
-
-        joint_name_to_id = {}
-        for i in range(self._sim_env.getNumJoints(self._body_id)):
-            joint_info = self._sim_env.getJointInfo(self._body_id, i)
-            joint_name_to_id[joint_info[1].decode("UTF-8")] = joint_info[0]
-        self._joint_ids = [joint_name_to_id.get(n, -1) for n in self._joint_names]
-        self._motor_ids = [self._get_joint_id(leg, j) for leg in range(4) for j in range(3)]
-        self._foot_ids = [self._get_joint_id(leg, -1) for leg in range(4)]
-
     def _configure_joints(self, cfg):
         for i in range(12):
             self._sim_env.resetJointState(self._body_id, self._motor_ids[i], cfg[i], 0.0)
-
-    def _get_joint_id(self, leg: Union[int, str], joint_type: Union[int, str] = 0):
-        if joint_type < 0:
-            joint_type += 4
-        return self._joint_ids[leg * 4 + joint_type]
 
     def _get_foot_states(self):
         """Get foot positions, orientations and forces by getLinkStates and getContactPoints."""
@@ -302,7 +341,7 @@ class AliengoBt(Quadruped):
             forces = p[9], p[10], p[12]
             contact_dict[link_idx] += sum(np.array(d) * f for d, f in zip(directions, forces))
         foot_forces = [contact_dict[foot_id] for foot_id in self._foot_ids]
-        return foot_positions, foot_orientations, foot_forces
+        return np.array(foot_positions), np.array(foot_orientations), np.array(foot_forces)
 
     def _get_contact_states(self):
         def _get_contact_state(link_id):

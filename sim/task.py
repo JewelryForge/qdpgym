@@ -135,6 +135,7 @@ class BasicTask(NullTask):
         self._reward_details = collections.defaultdict(float)
         self._substep_cnt = 0
 
+        self._terminate = False
         super().__init__()
 
     def add_reward(self, name: str, weight: float):
@@ -170,3 +171,9 @@ class BasicTask(NullTask):
             return self._reward, self._reward_details
         else:
             return self._reward
+
+    def set_terminate(self, flag=True):
+        self._terminate = flag
+
+    def is_failed(self):
+        return self._terminate

@@ -3,8 +3,14 @@ import math
 import numpy as np
 from scipy.spatial.transform import Rotation as scipyRotation
 
+
 def vnorm(vec):
     return math.sqrt(sum(x ** 2 for x in vec))
+
+
+def vunit(x) -> np.ndarray:
+    return np.asarray(x) / vnorm(x)
+
 
 def vcross(vec3_1, vec3_2) -> np.ndarray:
     """

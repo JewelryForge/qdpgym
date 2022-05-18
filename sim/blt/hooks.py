@@ -10,7 +10,6 @@ from qdpgym.utils import Angle
 
 class ViewerBtHook(Hook):
     def __init__(self, moving_cam=True):
-        self._disabled = False
         self._pre_vis = False
         self._init_vis = False
         self._sleep_on = True
@@ -29,21 +28,16 @@ class ViewerBtHook(Hook):
         if self._pre_vis:
             return
         self._pre_vis = True
-        if not env.render_mode:
-            self._disabled = True
-        else:
-            sim_env = env.sim_env
-            sim_env.configureDebugVisualizer(pyb.COV_ENABLE_RENDERING, False)
-            sim_env.configureDebugVisualizer(pyb.COV_ENABLE_GUI, False)
-            sim_env.configureDebugVisualizer(pyb.COV_ENABLE_TINY_RENDERER, False)
-            sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SHADOWS, False)
-            sim_env.configureDebugVisualizer(pyb.COV_ENABLE_RGB_BUFFER_PREVIEW, False)
-            sim_env.configureDebugVisualizer(pyb.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False)
-            sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False)
+        sim_env = env.sim_env
+        sim_env.configureDebugVisualizer(pyb.COV_ENABLE_RENDERING, False)
+        sim_env.configureDebugVisualizer(pyb.COV_ENABLE_GUI, False)
+        sim_env.configureDebugVisualizer(pyb.COV_ENABLE_TINY_RENDERER, False)
+        sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SHADOWS, False)
+        sim_env.configureDebugVisualizer(pyb.COV_ENABLE_RGB_BUFFER_PREVIEW, False)
+        sim_env.configureDebugVisualizer(pyb.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False)
+        sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False)
 
     def before_step(self, robot, env):
-        if self._disabled:
-            return
         if not self._init_vis:
             self._init_vis = True
             env.sim_env.configureDebugVisualizer(pyb.COV_ENABLE_RENDERING, True)
@@ -51,8 +45,6 @@ class ViewerBtHook(Hook):
             # self._dbg_reset = sim_env.addUserDebugParameter('reset', 1, 0, 0)
 
     def after_step(self, robot, env):
-        if self._disabled:
-            return
         sim_env = env.sim_env
         period = env.timestep * env.num_substeps
         time_spent = time.time() - self._last_frame_time
@@ -76,13 +68,16 @@ class ViewerBtHook(Hook):
                 self._robot_yaw_filter.append(robot.get_base_rpy()[2] - math.pi / 2)
                 # To avoid carsick :)
                 mean = Angle.mean(self._robot_yaw_filter)
+                degree = -30.
                 if self._cam_state == 2:  # around robot
                     mean = Angle.norm(mean + math.pi / 2)
+                    degree = 0.
                 elif self._cam_state == 3:
                     mean = Angle.norm(mean + math.pi)
                 elif self._cam_state == 4:
                     mean = Angle.norm(mean - math.pi / 2)
-                sim_env.resetDebugVisualizerCamera(1.5, Angle.to_deg(mean), -30., (x, y, z))
+                    degree = 0.
+                sim_env.resetDebugVisualizerCamera(1.5, Angle.to_deg(mean), degree, (x, y, z))
             env.sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SINGLE_STEP_RENDERING, True)
 
         KEY_SPACE = ord(' ')

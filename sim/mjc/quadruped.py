@@ -73,6 +73,10 @@ class AliengoObservableMj(composer.Observables):
         return observable.MJCFFeature('sensordata',
                                       self._entity.mjcf_model.sensor.accelerometer)
 
+    @composer.observable
+    def foot_pos(self):
+        return observable.MJCFFeature('xpos', self._entity.end_effectors)
+
 
 class AliengoModelMj(base.Walker):
     MODEL_PATH = 'aliengo/model/aliengo.xml'
@@ -296,6 +300,7 @@ class AliengoMj(Quadruped):
             angular_vel=self._handle.angular_vel(self._physics),
             joint_pos=self._handle.joint_pos(self._physics),
             joint_vel=self._handle.joint_vel(self._physics),
+            foot_pos=self._handle.foot_pos(self._physics),
             velocimeter=self._handle.sensors_velocimeter(self._physics),
             gyro=self._handle.sensors_gyro(self._physics),
             accelerometer=self._handle.sensors_accelerometer(self._physics),
@@ -384,6 +389,9 @@ class AliengoMj(Quadruped):
 
     def get_leg_contacts(self):
         return self._state.leg_contacts
+
+    def get_foot_pos(self):
+        return self._state.foot_pos
 
     def get_foot_contacts(self):
         return self._state.leg_contacts[((2, 5, 8, 11),)]

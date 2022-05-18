@@ -13,6 +13,7 @@ class LocomotionBase(BasicTask):
         super().__init__(reward_coeff, substep_reward_on)
         self._cmd = np.array((0., 0., 0.))
         self._traj_gen: Optional[TgStateMachine] = None
+
         self._weights: Optional[np.ndarray] = None
         self._bias: Optional[np.ndarray] = None
 
@@ -69,6 +70,7 @@ class LocomotionBase(BasicTask):
         cmd1, cmd2 = n.get_cmd_history(0.01).command, n.get_cmd_history(0.02).command
         joint_proc_err = np.concatenate((cmd1 - state1.joint_pos, cmd2 - state2.joint_pos))
         joint_proc_vel = np.concatenate((state1.joint_vel, state2.joint_vel))
+
         terrain_info = self._collect_terrain_info()
         contact_states = r.get_leg_contacts()
         contact_forces = r.get_force_sensor().reshape(-1)

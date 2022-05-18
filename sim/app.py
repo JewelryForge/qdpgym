@@ -3,7 +3,6 @@ from typing import Callable
 import torch
 
 from qdpgym.sim.abc import Quadruped, Environment, Task, StepType
-from qdpgym.utils import MfTimer
 
 
 class Application(object):
