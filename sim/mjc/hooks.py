@@ -5,17 +5,16 @@ import mujoco as mjlib
 from qdpgym import tf
 from qdpgym.sim.abc import Hook
 from qdpgym.sim.mjc.viewer import ViewerMj
-from qdpgym.utils import MfTimer
 
 
 class ViewerMjHook(Hook):
     def __init__(self):
         self._viewer: Optional[ViewerMj] = None
 
-    def initialize_episode(self, robot, env):
+    def init_episode(self, robot, env, random_state):
         self._viewer = ViewerMj(env.physics.model.ptr, env.physics.data.ptr)
 
-    def after_substep(self, robot, env):
+    def after_substep(self, robot, env, random_state):
         perturb = env.get_perturbation()
         if perturb is not None:
             force = perturb[:3]

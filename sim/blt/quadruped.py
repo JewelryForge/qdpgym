@@ -116,7 +116,8 @@ class AliengoBt(Quadruped):
 
     STANCE_HEIGHT = 0.43
     STANCE_CONFIG = (0., 0.6435, -1.287) * 4
-    STANCE_FOOT_POSITIONS = ((0., 0., -0.4),) * 4
+    STANCE_FOOT_POSITIONS = ((0., -LINK_LENGTHS[0], -0.4), (0., LINK_LENGTHS[0], -0.4),
+                             (0., -LINK_LENGTHS[0], -0.4), (0., LINK_LENGTHS[0], -0.4))
     JOINT_LIMITS = ((-1.22, 1.22), (None, None), (-2.77, -0.7)) * 4
     TORQUE_LIMITS = 44.4
 
@@ -168,8 +169,35 @@ class AliengoBt(Quadruped):
     def cmd_history(self):
         return ut.PadWrapper(self._cmd_history)
 
-    def add_to(self, arena: Terrain, pos=None, orn=None):
-        pass
+    def add_to(self, arena: Terrain, xy=None, yaw: float = None):
+        if xy is None:
+            xy = (0., 0.)
+        foot_xy = (np.array(self.STANCE_FOOT_POSITIONS) + np.array(self.HIP_OFFSETS))[:, :2]
+        if yaw is not None:
+            cy, sy = np.cos(yaw), np.sin(yaw)
+            trans = np.array(((cy, -sy),
+                              (sy, cy)))
+            foot_xy = np.array([trans @ f_xy for f_xy in foot_xy])
+        else:
+            cy, sy = 1., 0.
+        foot_xy += xy
+
+        terrain_points = []
+        est_height = 0.
+        for x, y in foot_xy:
+            z = arena.get_height(x, y)
+            est_height += z
+            terrain_points.append((x, y, z))
+        est_height /= 4
+        init_height = est_height + self.STANCE_HEIGHT
+
+        trn_Z = tf.estimate_normal(terrain_points)
+        trn_Y = tf.vcross(trn_Z, (cy, sy, 0.))
+        trn_X = tf.vcross(trn_Y, trn_Z)
+        orn = tf.Quaternion.inverse(
+            tf.Quaternion.from_rotation(np.array((trn_X, trn_Y, trn_Z)))
+        )
+        self._init_pose = (*xy, init_height), orn
 
     def spawn(self, sim_env, random_state: np.random.RandomState, cfg=None):
         self._sim_env = sim_env
@@ -178,6 +206,9 @@ class AliengoBt(Quadruped):
         if self._body_id == -1:
             self._body_id, self._motor_ids, self._foot_ids = \
                 self._model.spawn(self._sim_env, self._init_pose)
+        else:
+            sim_env.resetBasePositionAndOrientation(self._body_id, *self._init_pose)
+            sim_env.resetBaseVelocity(self._body_id, (0.,) * 3, (0.,) * 3)
         if self._random_dynamics:
             self._model.init_episode_dynamics(sim_env, random_state)
         else:
@@ -364,7 +395,7 @@ class AliengoBt(Quadruped):
         shoulder_len, thigh_len, shank_len = cls.LINK_LENGTHS
         if leg % 2 == 1:
             shoulder_len *= -1
-        pos = np.asarray(pos) + (0, -shoulder_len, 0) + cls.STANCE_FOOT_POSITIONS[leg]
+        pos = np.asarray(pos) + cls.STANCE_FOOT_POSITIONS[leg]
         while True:
             px, py, pz = pos  # pz must lower than shoulder-length
             px2, py2, pz2 = pos2 = pos ** 2

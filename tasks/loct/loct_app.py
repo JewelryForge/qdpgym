@@ -55,8 +55,8 @@ class LocomotionAppMj(Application):
         from qdpgym.sim.mjc.terrain import PlainMj, HillsMj
 
         robot = AliengoMj(500, 'actuator_net', noisy=False)
-        arena = PlainMj(10)
-        # arena = HillsMj(10, 0.1, (0.2, 20))
+        # arena = PlainMj(10)
+        arena = HillsMj(10, 0.1, (0.2, 20))
         task = LocomotionBase().add_hook(ViewerMjHook())
         env = QuadrupedEnvMj(robot, arena, task)
         network = Actor(78, 133, 12, (72, 64), (), (512, 256, 128)).to('cuda')
@@ -73,12 +73,14 @@ class LocomotionAppBt(Application):
     def __init__(self, model_path, gamepad='Xbox'):
         from qdpgym.sim.blt.env import QuadrupedEnvBt
         from qdpgym.sim.blt.quadruped import AliengoBt
-        from qdpgym.sim.blt.terrain import PlainBt
-        from qdpgym.sim.blt.hooks import ViewerBtHook
+        from qdpgym.sim.blt import terrain as t, hooks as h
 
         robot = AliengoBt(500, 'actuator_net', noisy=False)
-        arena = PlainBt()
-        task = LocomotionBase().add_hook(ViewerBtHook())
+        arena = t.TerrainBt()
+        # arena = HillsBt.make(20, 0.1, (0.2, 10), random_state=np.random)
+        task = LocomotionBase().add_hook(h.ExtraViewerBtHook())
+        task.add_hook(h.RandomTerrainBtHook())
+        task.add_hook(h.RandomPerturbBtHook())
         env = QuadrupedEnvBt(robot, arena, task)
         network = Actor(78, 133, 12, (72, 64), (), (512, 256, 128)).to('cuda')
         log.info(f'Loading model {model_path}')

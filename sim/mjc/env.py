@@ -21,26 +21,27 @@ class QuadrupedEnvMj(Environment):
         self._time_limit = time_limit
         self._num_substeps = num_substeps
 
-        self._arena.mjcf_model.option.timestep = timestep
-        self._robot.add_to(self._arena)
-        self._physics: Optional[mjcf.Physics] = None
-
+        self._init = False
         self._num_sim_steps = 0
         self._random = np.random.RandomState(seed)
+
+        self._arena.mjcf_model.option.timestep = timestep
+        self._physics: Optional[mjcf.Physics] = None
         self._task.register_env(self._robot, self, self._random)
         self._action_history = collections.deque(maxlen=10)
         self._perturbation = None
 
     def init_episode(self):
+        self._init = True
         self._num_sim_steps = 0
         self._action_history.clear()
 
+        self._robot.add_to(self._arena)
         self._robot.init_mjcf_model(self._random)
         self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
         self._task.initialize_episode()
         self._robot.init_physics(self._physics, self._random)
-        self._arena.initialize_episode(self._physics, self._random)
 
         for i in range(50):
             self._robot.update_observation(None, True)
@@ -67,6 +68,12 @@ class QuadrupedEnvMj(Environment):
     def arena(self):
         return self._arena
 
+    @arena.setter
+    def arena(self, value):
+        self._init = False
+        self._arena = value
+        self._robot.add_to(self._arena)
+
     @property
     def action_history(self):
         return PadWrapper(self._action_history)
@@ -84,10 +91,12 @@ class QuadrupedEnvMj(Environment):
         return self._num_substeps
 
     def step(self, action: ARRAY_LIKE):
+        assert self._init, 'Call `init_episode` before `step`!'
         action = self._task.before_step(action)
         action = np.asarray(action)
         prev_action = self._action_history[-1]
         self._action_history.append(action)
+
         for i in range(self._num_substeps):
             weight = (i + 1) / self._num_substeps
             current_action = action * weight + prev_action * (1 - weight)

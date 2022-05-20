@@ -4,6 +4,7 @@ import enum
 from typing import Union, Any
 
 import numpy as np
+from numpy.random import RandomState
 
 ARRAY_LIKE = Union[np.ndarray, list, tuple]
 NUMERIC = Union[int, float]
@@ -114,6 +115,9 @@ class Terrain(metaclass=abc.ABCMeta):
     def get_normal(self, x, y):
         raise NotImplementedError
 
+    def get_peak(self, x_range, y_range):
+        raise NotImplementedError
+
     def out_of_range(self, x, y) -> bool:
         raise NotImplementedError
 
@@ -170,6 +174,10 @@ class Environment(metaclass=abc.ABCMeta):
     def arena(self) -> Terrain:
         raise NotImplementedError
 
+    @arena.setter
+    def arena(self, value):
+        raise NotImplementedError
+
     @property
     def action_history(self):
         raise NotImplementedError
@@ -186,7 +194,7 @@ class Environment(metaclass=abc.ABCMeta):
     def timestep(self):
         raise NotImplementedError
 
-    def init_episode(self) -> TimeStep:
+    def init_episode(self, *args, **kwargs) -> TimeStep:
         raise NotImplementedError
 
     def step(self, action) -> TimeStep:
@@ -200,28 +208,28 @@ class Environment(metaclass=abc.ABCMeta):
 
 
 class Hook(metaclass=abc.ABCMeta):
-    def initialize(self, robot, env):
+    def initialize(self, robot, env, random_state: RandomState):
         pass
 
-    def initialize_episode(self, robot, env):
+    def init_episode(self, robot, env, random_state: RandomState):
         pass
 
-    def before_step(self, robot, env):
+    def before_step(self, robot, env, random_state: RandomState):
         pass
 
-    def before_substep(self, robot, env):
+    def before_substep(self, robot, env, random_state: RandomState):
         pass
 
-    def after_step(self, robot, env):
+    def after_step(self, robot, env, random_state: RandomState):
         pass
 
-    def after_substep(self, robot, env):
+    def after_substep(self, robot, env, random_state: RandomState):
         pass
 
-    def on_success(self, robot, env):
+    def on_success(self, robot, env, random_state: RandomState):
         pass
 
-    def on_termination(self, robot, env):
+    def on_fail(self, robot, env, random_state: RandomState):
         pass
 
 
@@ -247,7 +255,7 @@ class Task(metaclass=abc.ABCMeta):
     def on_fail(self):
         pass
 
-    def register_env(self, robot: Quadruped, env: Environment, random_state):
+    def register_env(self, robot: Quadruped, env: Environment, random_state: RandomState):
         raise NotImplementedError
 
     def add_hook(self, hook: Hook, name=None):

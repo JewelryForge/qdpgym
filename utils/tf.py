@@ -1,7 +1,12 @@
 import math
+from typing import Tuple, Sequence, Union
 
 import numpy as np
 from scipy.spatial.transform import Rotation as scipyRotation
+
+__all__ = ['Rotation', 'Quaternion', 'Rpy', 'Odometry',
+           'vnorm', 'vunit', 'vcross', 'estimate_normal',
+           'get_rpy_rate_from_ang_vel']
 
 
 def vnorm(vec):
@@ -73,7 +78,8 @@ class Quaternion(object):
 
     @staticmethod
     def inverse(q):
-        return np.array((-q.x, -q.y, -q.z, q.w))
+        x, y, z, w = q
+        return np.array((-x, -y, -z, w))
 
     @staticmethod
     def from_wxyz(q):
@@ -109,6 +115,26 @@ def get_rpy_rate_from_ang_vel(rpy, angular):
                       (0, cp, -sp),
                       (0, sp / cr, cp / cr)))
     return np.dot(trans, angular)
+
+
+FLOAT3 = Tuple[float, float, float]
+
+
+def estimate_normal(points: Union[Sequence[FLOAT3], np.ndarray]):
+    """
+    Estimate the normal of terrain from a set of points.
+    The terrain CANNOT be vertical.
+    :param points: a set of terrain points
+    :return: np.ndarray, the normal vector
+    """
+    X, Y, Z = np.array(points).T
+    A = np.zeros((3, 3))
+    A[0, :] = np.sum(X ** 2), X @ Y, np.sum(X)
+    A[1, :] = A[0, 1], np.sum(Y ** 2), np.sum(Y)
+    A[2, :] = A[0, 2], A[1, 2], len(X)
+    b = np.array((X @ Z, Y @ Z, np.sum(Z)))
+    a, b, _ = np.linalg.solve(A, b)
+    return vunit((-a, -b, 1))
 
 
 ARR_ZERO3 = (0., 0., 0.)

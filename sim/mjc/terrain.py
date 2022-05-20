@@ -1,7 +1,8 @@
+import abc
 from typing import Union, Tuple
 
 import numpy as np
-from dm_control.composer import Arena
+from dm_control import composer
 from scipy.interpolate import interp2d
 
 from qdpgym.sim.abc import NUMERIC, Terrain
@@ -14,7 +15,11 @@ def _process_size(size):
         return tuple(size)
 
 
-class TexturedTerrainBase(Arena, Terrain):
+class Arena(composer.Arena, Terrain, metaclass=abc.ABCMeta):
+    pass
+
+
+class TexturedTerrainBase(Arena):
     reflectance = 0.2
 
     def _build(self, size, name=None):
@@ -34,11 +39,6 @@ class TexturedTerrainBase(Arena, Terrain):
             texuniform=True, reflectance=self.reflectance, texture=self._ground_texture)
 
         self._terrain_geom = None
-
-    def add_top_camera(self, height, fov):
-        self._top_camera = self._mjcf_root.worldbody.add(
-            'camera', name='top_camera', pos=[0, 0, height],
-            quat=[1, 0, 0, 0], fovy=np.rad2deg(fov))
 
     @property
     def ground_geoms(self):

@@ -1,5 +1,5 @@
 import collections
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 
 from .abc import Task, Hook, Quadruped, Environment
 
@@ -11,7 +11,7 @@ class NullTask(Task):
         self._robot: Optional[Quadruped] = None
         self._env: Optional[Environment] = None
         self._random = None
-        self._hooks = []
+        self._hooks: List[Hook] = []
         self._hook_names = set()
         self._options = []
 
@@ -20,7 +20,7 @@ class NullTask(Task):
         self._env = env
         self._random = random_state
         for hook in self._hooks:
-            hook.initialize(self._robot, self._env)
+            hook.initialize(self._robot, self._env, random_state)
 
     def add_hook(self, hook: Hook, name=None):
         self._hooks.append(hook)
@@ -48,32 +48,32 @@ class NullTask(Task):
 
     def initialize_episode(self):
         for hook in self._hooks:
-            hook.initialize_episode(self._robot, self._env)
+            hook.init_episode(self._robot, self._env, self._random)
 
     def before_step(self, action):
         for hook in self._hooks:
-            hook.before_step(self._robot, self._env)
+            hook.before_step(self._robot, self._env, self._random)
         return action
 
     def before_substep(self):
         for hook in self._hooks:
-            hook.before_substep(self._robot, self._env)
+            hook.before_substep(self._robot, self._env, self._random)
 
     def after_step(self):
         for hook in self._hooks:
-            hook.after_step(self._robot, self._env)
+            hook.after_step(self._robot, self._env, self._random)
 
     def after_substep(self):
         for hook in self._hooks:
-            hook.after_substep(self._robot, self._env)
+            hook.after_substep(self._robot, self._env, self._random)
 
     def on_success(self):
         for hook in self._hooks:
-            hook.on_success(self._robot, self._env)
+            hook.on_success(self._robot, self._env, self._random)
 
     def on_fail(self):
         for hook in self._hooks:
-            hook.on_fail()
+            hook.on_fail(self._robot, self._env, self._random)
 
 
 class RewardRegistry(object):
@@ -135,7 +135,6 @@ class BasicTask(NullTask):
         self._reward_details = collections.defaultdict(float)
         self._substep_cnt = 0
 
-        self._terminate = False
         super().__init__()
 
     def add_reward(self, name: str, weight: float):
@@ -171,9 +170,3 @@ class BasicTask(NullTask):
             return self._reward, self._reward_details
         else:
             return self._reward
-
-    def set_terminate(self, flag=True):
-        self._terminate = flag
-
-    def is_failed(self):
-        return self._terminate

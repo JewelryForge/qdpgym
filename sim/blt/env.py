@@ -23,11 +23,12 @@ class QuadrupedEnvBt(Environment):
         self._num_substeps = num_sub_steps
         self._render = False
 
-        self._robot.add_to(self._arena)
-        self._sim_env = None if True else pyb
-
+        self._init = False
         self._num_sim_steps = 0
         self._random = np.random.RandomState(seed)
+
+        self._sim_env = None if True else pyb
+        self._reset_times, self._debug_reset_param = 0, -1
         self._task.register_env(self._robot, self, self._random)
         self._action_history = collections.deque(maxlen=10)
         self._perturbation = None
@@ -35,7 +36,8 @@ class QuadrupedEnvBt(Environment):
     def set_render(self, flag=True):
         self._render = flag
 
-    def init_episode(self):
+    def init_episode(self, init_yaw=0.):
+        self._init = True
         self._num_sim_steps = 0
         self._action_history.clear()
 
@@ -43,6 +45,7 @@ class QuadrupedEnvBt(Environment):
             if self._render:
                 fps = int(1 / (self._timestep * self._num_substeps))
                 self._sim_env = BulletClient(pyb.GUI, options=f'--width=1024 --height=768 --mp4fps={fps}')
+                self._debug_reset_param = self._sim_env.addUserDebugParameter('reset', 1, 0, 0)
             else:
                 self._sim_env = BulletClient(pyb.DIRECT)
             self._sim_env.setAdditionalSearchPath(pyb_data.getDataPath())
@@ -50,7 +53,9 @@ class QuadrupedEnvBt(Environment):
             self._sim_env.setGravity(0, 0, -9.8)
 
         self._task.initialize_episode()
-        self._arena.spawn(self._sim_env, self._random)
+        if not self._arena.spawned:
+            self._arena.spawn(self._sim_env)
+        self._robot.add_to(self._arena, yaw=init_yaw)
         self._robot.spawn(self._sim_env, self._random)
 
         for i in range(50):
@@ -81,6 +86,11 @@ class QuadrupedEnvBt(Environment):
     def arena(self):
         return self._arena
 
+    @arena.setter
+    def arena(self, value: TerrainBt):
+        self._arena.hand_over_to(value)
+        self._arena = value
+
     @property
     def action_history(self):
         return PadWrapper(self._action_history)
@@ -98,10 +108,15 @@ class QuadrupedEnvBt(Environment):
         return self._num_substeps
 
     def step(self, action: ARRAY_LIKE):
+        if self._check_debug_reset_param():
+            return self.init_episode()
+
+        assert self._init, 'Call `init_episode` before `step`!'
         action = self._task.before_step(action)
         action = np.asarray(action)
         prev_action = self._action_history[-1]
         self._action_history.append(action)
+
         for i in range(self._num_substeps):
             weight = (i + 1) / self._num_substeps
             current_action = action * weight + prev_action * (1 - weight)
@@ -165,5 +180,12 @@ class QuadrupedEnvBt(Environment):
             self._sim_env.applyExternalTorque(objectUniqueId=self._robot.id,
                                               linkIndex=self._applied_link_id,
                                               torqueObj=self._perturbation[3:],
-                                              posObj=self._robot.get_base_pos(),
                                               flags=pyb.WORLD_FRAME)
+
+    def _check_debug_reset_param(self):
+        if self._debug_reset_param != -1:
+            reset_times = self._sim_env.readUserDebugParameter(self._debug_reset_param)
+            if reset_times != self._reset_times:
+                self._reset_times = reset_times
+                return True
+        return False
