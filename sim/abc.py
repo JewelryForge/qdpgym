@@ -131,7 +131,7 @@ class StepType(enum.IntEnum):
 
 @dataclasses.dataclass
 class TimeStep:
-    status: StepType
+    status: Union[StepType, Any]
     observation: Any
     reward: Any = None
     reward_info: Any = None

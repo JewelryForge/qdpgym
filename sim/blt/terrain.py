@@ -19,28 +19,22 @@ class TerrainBt(Terrain, metaclass=abc.ABCMeta):
     def id(self):
         return self._id
 
-    @property
-    def spawned(self):
-        return self._spawned
-
-    def hand_over_to(self, obj: 'TerrainBt'):
-        assert obj._id == -1, f'`{obj}` have been spawned'
-        self._id, obj._id = obj._id, self._id
-
     def spawn(self, sim_env):
-        assert not self._spawned, f'{self} has been spawned'
-        self._spawned = True
+        raise NotImplementedError
+
+    def replace(self, sim_env, obj: 'TerrainBt'):
+        obj.remove(sim_env)
+        self.spawn(sim_env)
+
+    def remove(self, sim_env):
+        if self._id != -1:
+            sim_env.removeBody(self._id)
 
 
 class PlainBt(TerrainBt):
     def spawn(self, sim_env):
-        super().spawn(sim_env)
         self._id = sim_env.loadURDF("plane.urdf")
         sim_env.changeDynamics(self._id, -1, lateralFriction=1.0)
-
-    def hand_over_to(self, obj: 'TerrainBt'):
-        if self._id != -1:
-            raise RuntimeError('PlainBt cannot be handed over')
 
     def get_height(self, x, y):
         return 0.0
@@ -74,31 +68,54 @@ class HeightFieldTerrainBt(TerrainBt):
         self.x_rsl = self.y_rsl = heightfield.resolution
         self._shape_id = -1
 
-    def hand_over_to(self, obj: 'HeightFieldTerrainBt'):
-        super().hand_over_to(obj)
-        self._shape_id, obj._shape_id = obj._shape_id, self._shape_id
-
     def spawn(self, sim_env):
-        super().spawn(sim_env)
-        # Currently, in the master branch of bullet,
-        # Heightfield replacement may cause collision detection failure.
-        # See https://github.com/bulletphysics/bullet3/issues/4236
-        # See https://github.com/bulletphysics/bullet3/pull/4253
-        replace_id = self._shape_id
+        if self._id != -1:
+            return
         self._shape_id = sim_env.createCollisionShape(
             shapeType=pyb.GEOM_HEIGHTFIELD, flags=pyb.GEOM_CONCAVE_INTERNAL_EDGE,
             meshScale=(self.x_rsl, self.y_rsl, 1.0),
             heightfieldTextureScaling=self.x_size,
             heightfieldData=self.heightfield.reshape(-1),
             numHeightfieldColumns=self.x_dim, numHeightfieldRows=self.y_dim,
-            replaceHeightfieldIndex=replace_id)
-        if replace_id == -1:
-            self._id = sim_env.createMultiBody(0, self._shape_id)
-            sim_env.changeVisualShape(self._id, -1, rgbaColor=(1, 1, 1, 1))
-            sim_env.changeDynamics(self._id, -1, lateralFriction=1.0)
+            replaceHeightfieldIndex=-1)
+        self._id = sim_env.createMultiBody(0, self._shape_id)
+        sim_env.changeVisualShape(self._id, -1, rgbaColor=(1, 1, 1, 1))
+        sim_env.changeDynamics(self._id, -1, lateralFriction=1.0)
         origin_z = (np.max(self.heightfield) + np.min(self.heightfield)) / 2
         sim_env.resetBasePositionAndOrientation(self._id, (0, 0, origin_z),
                                                 (0., 0., 0., 1.))
+
+    def replace(self, sim_env, obj):
+        assert self._id == self._shape_id == -1, f'`{self}` have been spawned'
+        if obj._id == -1:
+            return
+
+        if not isinstance(obj, HeightFieldTerrainBt):
+            return super().replace(sim_env, obj)
+
+        # Currently, in bullet <= 3.2.4,
+        # Heightfield replacement may cause collision detection failure.
+        # See https://github.com/bulletphysics/bullet3/issues/4236
+        # See https://github.com/bulletphysics/bullet3/pull/4253
+        self._id = obj._id
+        self._shape_id = sim_env.createCollisionShape(
+            shapeType=pyb.GEOM_HEIGHTFIELD, flags=pyb.GEOM_CONCAVE_INTERNAL_EDGE,
+            meshScale=(self.x_rsl, self.y_rsl, 1.0),
+            heightfieldTextureScaling=self.x_size,
+            heightfieldData=self.heightfield.reshape(-1),
+            numHeightfieldColumns=self.x_dim, numHeightfieldRows=self.y_dim,
+            replaceHeightfieldIndex=obj._shape_id)
+        obj._id = obj._shape_id = -1
+
+        origin_z = (np.max(self.heightfield) + np.min(self.heightfield)) / 2
+        sim_env.resetBasePositionAndOrientation(self._id, (0, 0, origin_z),
+                                                (0., 0., 0., 1.))
+
+    def remove(self, sim_env):
+        if self._id != -1:
+            sim_env.removeBody(self._id)
+            sim_env.removeCollisionShape(self._shape_id)
+            self._id = self._shape_id = -1
 
     @property
     def shape_id(self):
@@ -251,7 +268,7 @@ class SlopesBt(HeightFieldTerrainBt):
 
     @classmethod
     def default(cls):
-        return cls.make(20, 0.05, 0.17, 3.0)
+        return cls.make(20, 0.1, 0.17, 3.0)
 
 
 class StepsBt(HeightFieldTerrainBt):
@@ -274,4 +291,4 @@ class StepsBt(HeightFieldTerrainBt):
 
     @classmethod
     def default(cls):
-        return cls.make(20, 0.05, 1.0, 0.1, random_state=np.random)
+        return cls.make(20, 0.1, 1.0, 0.1, random_state=np.random)

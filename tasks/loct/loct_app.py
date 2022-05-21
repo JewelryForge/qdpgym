@@ -1,15 +1,12 @@
 import sys
 import time
 
-import numpy as np
-import torch
-
+import qdpgym
 from qdpgym.sim.app import Application
-from qdpgym.tasks.loct.loct import LocomotionBase
-from qdpgym.tasks.loct.loct_utils import Actor
+from qdpgym.tasks.loct import LocomotionV0
 from qdpgym.utils import log
 
-__all__ = ['LocomotionAppMj', 'LocomotionAppBt']
+__all__ = ['LocomotionApp']
 
 
 class GamepadCommander(object):
@@ -47,46 +44,21 @@ class GamepadCommander(object):
         self.gamepad.disconnect()
 
 
-class LocomotionAppMj(Application):
-    def __init__(self, model_path, gamepad='Xbox'):
-        from qdpgym.sim.mjc.env import QuadrupedEnvMj
-        from qdpgym.sim.mjc.hooks import ViewerMjHook
-        from qdpgym.sim.mjc.quadruped import AliengoMj
-        from qdpgym.sim.mjc.terrain import PlainMj, HillsMj
+class LocomotionApp(Application):
+    def __init__(self, policy, gamepad='Xbox'):
+        from qdpgym.sim import QuadrupedEnv, Aliengo, hooks, NullTerrain
 
-        robot = AliengoMj(500, 'actuator_net', noisy=False)
-        # arena = PlainMj(10)
-        arena = HillsMj(10, 0.1, (0.2, 20))
-        task = LocomotionBase().add_hook(ViewerMjHook())
-        env = QuadrupedEnvMj(robot, arena, task)
-        network = Actor(78, 133, 12, (72, 64), (), (512, 256, 128)).to('cuda')
-        log.info(f'Loading model {model_path}')
-        model_info = torch.load(model_path)
-        network.load_state_dict(model_info['actor_state_dict'])
-        policy = lambda obs: network.policy(obs) * np.array((0.2, 0.2, 0.1) * 4)
-        super().__init__(robot, env, task, policy)
-        if gamepad and GamepadCommander.is_available():
-            self.add_callback(GamepadCommander(gamepad).callback)
-
-
-class LocomotionAppBt(Application):
-    def __init__(self, model_path, gamepad='Xbox'):
-        from qdpgym.sim.blt.env import QuadrupedEnvBt
-        from qdpgym.sim.blt.quadruped import AliengoBt
-        from qdpgym.sim.blt import terrain as t, hooks as h
-
-        robot = AliengoBt(500, 'actuator_net', noisy=False)
-        arena = t.TerrainBt()
-        # arena = HillsBt.make(20, 0.1, (0.2, 10), random_state=np.random)
-        task = LocomotionBase().add_hook(h.ExtraViewerBtHook())
-        task.add_hook(h.RandomTerrainBtHook())
-        task.add_hook(h.RandomPerturbBtHook())
-        env = QuadrupedEnvBt(robot, arena, task)
-        network = Actor(78, 133, 12, (72, 64), (), (512, 256, 128)).to('cuda')
-        log.info(f'Loading model {model_path}')
-        model_info = torch.load(model_path)
-        network.load_state_dict(model_info['actor_state_dict'])
-        policy = lambda obs: network.policy(obs) * np.array((0.2, 0.2, 0.1) * 4)
+        robot = Aliengo(500, 'actuator_net', noisy=False)
+        task = LocomotionV0()
+        if qdpgym.sim_engine == qdpgym.Sim.BULLET:
+            arena = NullTerrain()
+            task.add_hook(hooks.ExtraViewerBtHook())
+            task.add_hook(hooks.RandomTerrainBtHook())
+            # task.add_hook(hooks.RandomPerturbBtHook())
+            # task.add_hook(hooks.VideoRecorderBtHook())
+        else:
+            raise NotImplementedError
+        env = QuadrupedEnv(robot, arena, task)
         super().__init__(robot, env, task, policy)
         if gamepad and GamepadCommander.is_available():
             self.add_callback(GamepadCommander(gamepad).callback)

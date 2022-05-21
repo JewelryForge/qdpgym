@@ -1,15 +1,14 @@
 import functools
 import logging
 import math
-import os
 import time
-from logging.handlers import SocketHandler
-from typing import Sequence, Callable, Optional
+from datetime import datetime
+from typing import Sequence, Callable, Optional, Union
 
 import numpy as np
 
 __all__ = ['make_part', 'Angle', 'replace_is', 'replace_eq', 'colored_str', 'log',
-           'MfTimer', 'get_padded', 'PadWrapper']
+           'MfTimer', 'get_padded', 'PadWrapper', 'get_timestamp']
 
 
 class make_part(functools.partial):
@@ -258,3 +257,8 @@ class _Log(object):
 
 
 log = _Log
+
+
+def get_timestamp(timestamp: Union[int, float] = None) -> str:
+    datetime_ = datetime.fromtimestamp(timestamp) if timestamp else datetime.now()
+    return datetime_.strftime('%y-%m-%d_%H-%M-%S')

@@ -1,6 +1,7 @@
 import collections
 import copy
 import math
+import os
 import time
 
 import numpy as np
@@ -8,7 +9,7 @@ import pybullet as pyb
 
 from qdpgym.sim.abc import Hook
 from qdpgym.sim.blt.terrain import HillsBt, SlopesBt, StepsBt, PlainHfBt
-from qdpgym.utils import Angle, tf
+from qdpgym.utils import Angle, tf, get_timestamp, log
 
 
 class ViewerBtHook(Hook):
@@ -218,3 +219,26 @@ class RandomPerturbBtHook(Hook):
             env.set_perturbation(np.concatenate(self.get_random_perturb(random_state)))
             self.update_interval = random_state.uniform(*self.interval_range)
             self.last_update = env.sim_time
+
+
+class VideoRecorderBtHook(Hook):
+    def __init__(self, path=''):
+        if not path:
+            path = os.path.join('Videos', f'record-{get_timestamp()}.mp4')
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        self._path = path
+        self._log_id = -1
+        self._status = True
+
+    def before_step(self, robot, env, random_state):
+        if self._log_id == -1 and self._status:
+            log.info('start recording')
+            self._log_id = env.sim_env.startStateLogging(
+                pyb.STATE_LOGGING_VIDEO_MP4, self._path
+            )
+            self._status = False
+
+    def init_episode(self, robot, env, random_state):
+        if self._log_id != -1:
+            env.client.stopStateLogging(self._log_id)
+            self._log_id = -1

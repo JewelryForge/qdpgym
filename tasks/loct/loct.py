@@ -8,7 +8,7 @@ from qdpgym.sim.common.tg import TgStateMachine, vertical_tg
 from qdpgym.sim.task import BasicTask
 
 
-class LocomotionBase(BasicTask):
+class LocomotionV0(BasicTask):
     def __init__(self, reward_coeff=1.0, substep_reward_on=True):
         super().__init__(reward_coeff, substep_reward_on)
         self._cmd = np.array((0., 0., 0.))
@@ -31,8 +31,12 @@ class LocomotionBase(BasicTask):
                                         random_state, vertical_tg(0.12))
         self._build_weights_and_bias()
 
+    def process_action(self, action):
+        return action * np.array((0.2, 0.2, 0.1) * 4)
+
     def before_step(self, action):
         action = super().before_step(action)
+        action = self.process_action(action)
         self._traj_gen.update()
         priori = self._traj_gen.get_priori_trajectory().reshape(4, 3)
         des_pos = action.reshape(4, 3) + priori

@@ -23,7 +23,19 @@ def is_mujoco_available():
     return True
 
 
-# if qdpgym.sim_engine == 'mujoco':
-#     assert is_mujoco_available(), 'dm_control is not installed'
-# else:
-#     assert is_bullet_available(), 'pybullet is not installed'
+if qdpgym.sim_engine == qdpgym.Sim.MUJOCO:
+    assert is_mujoco_available(), 'dm_control is not installed'
+    raise NotImplementedError
+else:
+    assert is_bullet_available(), 'pybullet is not installed'
+    from .blt.quadruped import AliengoBt as Aliengo
+    from .blt.env import QuadrupedEnvBt as QuadrupedEnv
+    from .blt.terrain import TerrainBt as NullTerrain
+    from .blt.terrain import HillsBt as Hills
+    import qdpgym.sim.blt.hooks as hooks
+    import qdpgym.sim.blt.terrain as terrain
+
+    from .blt.hooks import ViewerBtHook as ViewerHook
+    from .blt.hooks import ExtraViewerBtHook as ExtraViewerHook
+    from .blt.hooks import RandomPerturbBtHook as RandomPerturbHook
+    from .blt.hooks import RandomTerrainBtHook as RandomTerrainHook

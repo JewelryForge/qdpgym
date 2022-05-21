@@ -1,3 +1,5 @@
+import enum
+
 import torch
 
 from .utils import tf
@@ -7,4 +9,10 @@ try:
 except ImportError:
     torch.inference_mode = torch.no_grad
 
-sim_engine = 'mujoco'  # bullet or mujoco
+
+class Sim(enum.IntEnum):
+    BULLET = 0
+    MUJOCO = 1
+
+
+sim_engine: Sim = Sim.BULLET

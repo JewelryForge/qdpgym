@@ -53,8 +53,7 @@ class QuadrupedEnvBt(Environment):
             self._sim_env.setGravity(0, 0, -9.8)
 
         self._task.initialize_episode()
-        if not self._arena.spawned:
-            self._arena.spawn(self._sim_env)
+        self._arena.spawn(self._sim_env)
         self._robot.add_to(self._arena, yaw=init_yaw)
         self._robot.spawn(self._sim_env, self._random)
 
@@ -88,7 +87,7 @@ class QuadrupedEnvBt(Environment):
 
     @arena.setter
     def arena(self, value: TerrainBt):
-        self._arena.hand_over_to(value)
+        value.replace(self._sim_env, self._arena)
         self._arena = value
 
     @property
