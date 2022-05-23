@@ -6,21 +6,22 @@ import pybullet_data as pyb_data
 from pybullet_utils.bullet_client import BulletClient
 
 from qdpgym.sim.abc import Task, Environment, ARRAY_LIKE, TimeStep, StepType
-from qdpgym.sim.blt.quadruped import AliengoBt
-from qdpgym.sim.blt.terrain import TerrainBt
-from qdpgym.utils import PadWrapper
+from qdpgym.sim.blt.quadruped import Aliengo
+from qdpgym.sim.blt.terrain import TerrainBase
+from qdpgym.utils import PadWrapper, tf
 
 
-class QuadrupedEnvBt(Environment):
-    def __init__(self, robot: AliengoBt, arena: TerrainBt, task: Task,
-                 timestep: float = 2e-3, time_limit: float = None,
-                 num_sub_steps=10, seed=None):
+class QuadrupedEnv(Environment):
+    def __init__(self, robot: Aliengo, arena: TerrainBase, task: Task,
+                 timestep: float = 2e-3, time_limit: float = 20,
+                 num_substeps=10, seed=None):
         self._robot = robot
         self._arena = arena
         self._task = task
         self._timestep = timestep
         self._time_limit = time_limit
-        self._num_substeps = num_sub_steps
+        self._num_substeps = num_substeps
+        self._step_freq = 1 / (self.timestep * self._num_substeps)
         self._render = False
 
         self._init = False
@@ -33,6 +34,10 @@ class QuadrupedEnvBt(Environment):
         self._action_history = collections.deque(maxlen=10)
         self._perturbation = None
 
+        self._interact_terrain_samples = []
+        self._interact_terrain_normal = None
+        self._interact_terrain_height = 0.0
+
     def set_render(self, flag=True):
         self._render = flag
 
@@ -43,7 +48,7 @@ class QuadrupedEnvBt(Environment):
 
         if self._sim_env is None:
             if self._render:
-                fps = int(1 / (self._timestep * self._num_substeps))
+                fps = int(self._step_freq)
                 self._sim_env = BulletClient(pyb.GUI, options=f'--width=1024 --height=768 --mp4fps={fps}')
                 self._debug_reset_param = self._sim_env.addUserDebugParameter('reset', 1, 0, 0)
             else:
@@ -69,6 +74,9 @@ class QuadrupedEnvBt(Environment):
             self._task.get_observation()
         )
 
+    def __del__(self):
+        self._sim_env.disconnect()
+
     @property
     def robot(self):
         return self._robot
@@ -86,7 +94,7 @@ class QuadrupedEnvBt(Environment):
         return self._arena
 
     @arena.setter
-    def arena(self, value: TerrainBt):
+    def arena(self, value: TerrainBase):
         value.replace(self._sim_env, self._arena)
         self._arena = value
 
@@ -126,7 +134,6 @@ class QuadrupedEnvBt(Environment):
             self._sim_env.stepSimulation()
             self._num_sim_steps += 1
             self._update_observation()
-            self._robot.update_observation(self._random)
 
             self._task.after_substep()
         self._task.after_step()
@@ -148,7 +155,59 @@ class QuadrupedEnvBt(Environment):
         )
 
     def _update_observation(self):
-        pass
+        self._robot.update_observation(self._random)
+
+        self._interact_terrain_samples.clear()
+        self._interact_terrain_height = 0.
+        xy_points = self._robot.get_foot_pos()
+        for x, y, _ in xy_points:
+            h = self._arena.get_height(x, y)
+            self._interact_terrain_height += h
+            self._interact_terrain_samples.append((x, y, h))
+        self._interact_terrain_height /= 4
+        self._interact_terrain_normal = tf.estimate_normal(self._interact_terrain_samples)
+
+    def get_action_rate(self) -> np.ndarray:
+        if len(self._action_history) < 2:
+            return np.zeros(12)
+        actions = [self._action_history[-i - 1] for i in range(2)]
+        return (actions[0] - actions[1]) * self._step_freq
+
+    def get_action_accel(self) -> np.ndarray:
+        if len(self._action_history) < 3:
+            return np.zeros(12)
+        actions = [self._action_history[-i - 1] for i in range(3)]
+        return (actions[0] - 2 * actions[1] + actions[2]) * self._step_freq ** 2
+
+    # def get_terrain_sample(self, x, y, yaw):
+    #     dx, dy = 0.1 * np.cos(yaw), 0.1 * np.sin(yaw)
+    #     points = ((dx - dy, dx + dy), (dx, dy), (dx + dy, -dx + dy),
+    #               (-dy, dx), (0, 0), (dy, -dx),
+    #               (-dx - dy, dx - dy), (-dx, -dy), (-dx + dy, -dx - dy))
+    #     samples = []
+    #     for dx, dy in points:
+    #         px, py = x + dx, y + dy
+    #         samples.append((px, py, self._arena.get_height(px, py)))
+    #     return samples
+    #
+    # def get_terrain_scan(self, x, y, yaw):
+    #     dx, dy = 0.1 * np.cos(yaw), 0.1 * np.sin(yaw)
+    #     points = ((dx - dy, dx + dy), (dx, dy), (dx + dy, -dx + dy),
+    #               (-dy, dx), (0, 0), (dy, -dx),
+    #               (-dx - dy, dx - dy), (-dx, -dy), (-dx + dy, -dx - dy))
+    #     scan = []
+    #     for dx, dy in points:
+    #         scan.append(self._arena.get_height(x + dx, y + dy))
+    #     return scan
+
+    def get_relative_robot_height(self) -> float:
+        return self._robot.get_base_pos()[2] - self._interact_terrain_height
+
+    def get_interact_terrain_normal(self):
+        return self._interact_terrain_normal
+
+    def get_interact_terrain_rot(self) -> np.ndarray:
+        return tf.Rotation.from_zaxis(self._interact_terrain_normal)
 
     def get_perturbation(self, in_robot_frame=False):
         if self._perturbation is None:

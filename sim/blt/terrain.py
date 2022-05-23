@@ -10,7 +10,7 @@ from qdpgym.sim.abc import Terrain, NUMERIC
 from qdpgym.utils.tf import vcross, vunit
 
 
-class TerrainBt(Terrain, metaclass=abc.ABCMeta):
+class TerrainBase(Terrain, metaclass=abc.ABCMeta):
     def __init__(self):
         self._id: int = -1
         self._spawned = False
@@ -22,7 +22,7 @@ class TerrainBt(Terrain, metaclass=abc.ABCMeta):
     def spawn(self, sim_env):
         raise NotImplementedError
 
-    def replace(self, sim_env, obj: 'TerrainBt'):
+    def replace(self, sim_env, obj: 'TerrainBase'):
         obj.remove(sim_env)
         self.spawn(sim_env)
 
@@ -31,8 +31,14 @@ class TerrainBt(Terrain, metaclass=abc.ABCMeta):
             sim_env.removeBody(self._id)
 
 
-class PlainBt(TerrainBt):
+class NullTerrain(TerrainBase):
+    pass
+
+
+class Plain(TerrainBase):
     def spawn(self, sim_env):
+        if self._id != -1:
+            return
         self._id = sim_env.loadURDF("plane.urdf")
         sim_env.changeDynamics(self._id, -1, lateralFriction=1.0)
 
@@ -56,7 +62,7 @@ class HeightField:
     resolution: NUMERIC
 
 
-class HeightFieldTerrainBt(TerrainBt):
+class HeightFieldTerrain(TerrainBase):
     def __init__(self, heightfield: HeightField):
         super().__init__()
         self.heightfield = heightfield.data
@@ -90,7 +96,7 @@ class HeightFieldTerrainBt(TerrainBt):
         if obj._id == -1:
             return
 
-        if not isinstance(obj, HeightFieldTerrainBt):
+        if not isinstance(obj, HeightFieldTerrain):
             return super().replace(sim_env, obj)
 
         # Currently, in bullet <= 3.2.4,
@@ -183,7 +189,7 @@ class HeightFieldTerrainBt(TerrainBt):
         return abs(x) > self.x_size / 2 - 1 or abs(y) > self.y_size / 2 - 1
 
 
-class HillsBt(HeightFieldTerrainBt):
+class Hills(HeightFieldTerrain):
     def __init__(self, heightfield):
         super().__init__(heightfield)
 
@@ -209,7 +215,7 @@ class HillsBt(HeightFieldTerrainBt):
         return cls.make(20, 0.1, (0.2, 10), random_state=np.random)
 
 
-class PlainHfBt(HeightFieldTerrainBt):
+class PlainHf(HeightFieldTerrain):
     @classmethod
     def make(cls, size, resolution):
         return cls(cls.make_heightfield(size, resolution))
@@ -234,7 +240,7 @@ class PlainHfBt(HeightFieldTerrainBt):
         return cls.make(20, 0.1)
 
 
-class SlopesBt(HeightFieldTerrainBt):
+class Slopes(HeightFieldTerrain):
     @classmethod
     def make(cls, size, resolution, slope, slope_width, axis='x'):
         return cls(cls.make_heightfield(size, resolution, slope, slope_width, axis))
@@ -259,11 +265,11 @@ class SlopesBt(HeightFieldTerrainBt):
         return HeightField(cls.rotate(hfield_data, axis), size, resolution)
 
     @classmethod
-    def rotate(cls, height_field_data, axis):
+    def rotate(cls, hfield_data, axis):
         if axis == 'x':
-            return height_field_data
+            return hfield_data
         elif axis == 'y':
-            return height_field_data.T
+            return hfield_data.T
         raise RuntimeError('Unknown axis')
 
     @classmethod
@@ -271,7 +277,7 @@ class SlopesBt(HeightFieldTerrainBt):
         return cls.make(20, 0.1, 0.17, 3.0)
 
 
-class StepsBt(HeightFieldTerrainBt):
+class Steps(HeightFieldTerrain):
     @classmethod
     def make(cls, size, resolution, step_width, max_step_height, random_state):
         return cls(cls.make_heightfield(size, resolution, step_width, max_step_height, random_state))

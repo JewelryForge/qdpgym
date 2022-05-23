@@ -8,11 +8,11 @@ import numpy as np
 import pybullet as pyb
 
 from qdpgym.sim.abc import Hook
-from qdpgym.sim.blt.terrain import HillsBt, SlopesBt, StepsBt, PlainHfBt
+from qdpgym.sim.blt.terrain import Hills, Slopes, Steps, PlainHf
 from qdpgym.utils import Angle, tf, get_timestamp, log
 
 
-class ViewerBtHook(Hook):
+class ViewerHook(Hook):
     def __init__(self):
         self._pre_vis = False
         self._init_vis = False
@@ -123,7 +123,7 @@ class _TorqueVisualizerHelper(object):
             return marker_info
 
 
-class ExtraViewerBtHook(ViewerBtHook):
+class ExtraViewerHook(ViewerHook):
     def __init__(self, perturb=True):
         super().__init__()
         self._show_perturb = perturb
@@ -155,7 +155,7 @@ class ExtraViewerBtHook(ViewerBtHook):
                 self._last_perturb = perturb
 
 
-class RandomTerrainBtHook(Hook):
+class RandomTerrainHook(Hook):
     def __init__(self):
         self.max_roughness = 0.2
         self.max_slope = 10 / 180 * math.pi
@@ -172,34 +172,30 @@ class RandomTerrainBtHook(Hook):
         terrain = None
         if terrain_type == 0:
             roughness = self.max_roughness * difficulty
-            terrain = HillsBt.make(size, resolution, (roughness, 20),
-                                   random_state=random_state)
+            terrain = Hills.make(size, resolution, (roughness, 20),
+                                 random_state=random_state)
         elif terrain_type == 1:
             slope = self.max_slope * difficulty
             axis = random_state.choice(('x', 'y'))
-            terrain = SlopesBt.make(size, resolution, slope, 3., axis)
+            terrain = Slopes.make(size, resolution, slope, 3., axis)
         elif terrain_type == 2:
             step_height = self.max_step_height * difficulty
-            terrain = StepsBt.make(size, resolution, 1., step_height, random_state)
+            terrain = Steps.make(size, resolution, 1., step_height, random_state)
         elif terrain_type == 3:
-            terrain = PlainHfBt.make(size, resolution)
+            terrain = PlainHf.make(size, resolution)
         return terrain
 
     def init_episode(self, robot, env, random_state):
         env.arena = self.generate_terrain(random_state)
 
 
-class RandomPerturbBtHook(Hook):
+class RandomPerturbHook(Hook):
     def __init__(self):
         self.force_magnitude = np.array((20., 20.))
         self.torque_magnitude = np.array((2.5, 5., 5.))
         self.interval_range = (0.5, 2.0)
-        self.update_interval = 0
+        self.interval = 0
         self.last_update = 0
-
-    def init_episode(self, robot, env, random_state):
-        env.set_perturbation(np.concatenate(self.get_random_perturb(random_state)))
-        self.update_interval = random_state.uniform(*self.interval_range)
 
     def get_random_perturb(self, random_state):
         horizontal_force = random_state.uniform(0, self.force_magnitude[0])
@@ -215,13 +211,13 @@ class RandomPerturbBtHook(Hook):
         return external_force, external_torque
 
     def before_substep(self, robot, env, random_state):
-        if env.sim_time >= self.last_update + self.update_interval:
+        if env.sim_time >= self.last_update + self.interval:
             env.set_perturbation(np.concatenate(self.get_random_perturb(random_state)))
-            self.update_interval = random_state.uniform(*self.interval_range)
+            self.interval = random_state.uniform(*self.interval_range)
             self.last_update = env.sim_time
 
 
-class VideoRecorderBtHook(Hook):
+class VideoRecorderHook(Hook):
     def __init__(self, path=''):
         if not path:
             path = os.path.join('Videos', f'record-{get_timestamp()}.mp4')

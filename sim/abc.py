@@ -73,10 +73,22 @@ class QuadrupedHandle(metaclass=abc.ABCMeta):
     def get_force_sensor(self):
         raise NotImplementedError
 
+    def get_slip_vel(self):
+        raise NotImplementedError
+
+    def get_strides(self):
+        raise NotImplementedError
+
+    def get_clearances(self):
+        raise NotImplementedError
+
     def get_joint_pos(self) -> np.ndarray:
         raise NotImplementedError
 
     def get_joint_vel(self) -> np.ndarray:
+        raise NotImplementedError
+
+    def get_joint_acc(self) -> np.ndarray:
         raise NotImplementedError
 
     def get_last_command(self) -> np.ndarray:
@@ -87,6 +99,7 @@ class QuadrupedHandle(metaclass=abc.ABCMeta):
 
 
 class Quadruped(QuadrupedHandle, metaclass=abc.ABCMeta):
+    STANCE_HEIGHT: float
     STANCE_CONFIG: tuple
 
     @property
@@ -133,7 +146,7 @@ class StepType(enum.IntEnum):
 class TimeStep:
     status: Union[StepType, Any]
     observation: Any
-    reward: Any = None
+    reward: Any = 0.
     reward_info: Any = None
     info: Any = None
 
@@ -148,11 +161,12 @@ class Snapshot(object):
     angular_vel: np.ndarray = None
     joint_pos: np.ndarray = None
     joint_vel: np.ndarray = None
+    joint_acc: np.ndarray = None
     foot_pos: np.ndarray = None
     velocimeter: np.ndarray = None
     gyro: np.ndarray = None
     accelerometer: np.ndarray = None
-    torso_contact: int = None
+    torso_contact: bool = None
     leg_contacts: np.ndarray = None
     contact_forces: np.ndarray = None
     force_sensor: np.ndarray = None
@@ -200,6 +214,21 @@ class Environment(metaclass=abc.ABCMeta):
     def step(self, action) -> TimeStep:
         raise NotImplementedError
 
+    def get_action_rate(self) -> np.ndarray:
+        raise NotImplementedError
+
+    def get_action_accel(self) -> np.ndarray:
+        raise NotImplementedError
+
+    def get_relative_robot_height(self) -> float:
+        raise NotImplementedError
+
+    def get_interact_terrain_normal(self):
+        raise NotImplementedError
+
+    def get_interact_terrain_rot(self) -> np.ndarray:
+        raise NotImplementedError
+
     def get_perturbation(self, in_robot_frame=False):
         raise NotImplementedError
 
@@ -208,6 +237,9 @@ class Environment(metaclass=abc.ABCMeta):
 
 
 class Hook(metaclass=abc.ABCMeta):
+    def register_task(self, task):
+        pass
+
     def initialize(self, robot, env, random_state: RandomState):
         pass
 
@@ -265,6 +297,12 @@ class Task(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def get_reward(self, detailed=True):
+        """
+        Get the reward sum in a step.
+        Rewards should be calculated in `after_step` or/and `after_substep`.
+        :param detailed: returns an extra dict containing all reward terms.
+        :return: reward(, details)
+        """
         raise NotImplementedError
 
     def is_succeeded(self):

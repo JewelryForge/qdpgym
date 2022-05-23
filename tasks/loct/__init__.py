@@ -1,2 +1,2 @@
 from .loct import *
-from .loct_app import *
+from .app import *

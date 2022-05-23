@@ -117,3 +117,8 @@ class NoisyHandle(QuadrupedHandle):
 
     def get_last_command(self) -> np.ndarray:
         return self._robot.get_last_command()
+
+    def reset(self):
+        self._obs = None
+        self._obs_buffer.clear()
+        self._obs_history.clear()

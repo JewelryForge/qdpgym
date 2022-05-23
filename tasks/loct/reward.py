@@ -12,7 +12,7 @@ SQRT_LOG20 = math.sqrt(math.log(20))
 
 
 class Reward(ABC):
-    def __call__(self, cmd, env, robot) -> float:
+    def __call__(self, robot, env, task) -> float:
         raise NotImplementedError
 
 
@@ -80,42 +80,31 @@ def soft_constrain(thr, upper):
     return _reshape
 
 
-class LinearVelocityReward(Reward):
-    def __init__(self, forward=0.8, lateral=0.4):
+class UnifiedLinearReward(Reward):
+    def __init__(self, forward=1.0, lateral=0.8, ort_upper=0.3, ort_weight=0.33):
         self.forward, self.lateral = forward, lateral
-        self.forward_lateral = forward * lateral
+        self.coeff = forward * lateral
+        self.ort_reshape = tanh2_reshape(0, ort_upper)
+        self.ort_weight = ort_weight
 
-    def __call__(self, cmd, env, robot):
-        linear = robot.getBaseLinearVelocityInBaseFrame()
-        projected_velocity = np.dot(cmd[:2], linear[:2])
-        if (cmd[:2] == 0.).all():
-            return 1.
-        return self.reshape(self.get_desired_velocity(cmd), projected_velocity)
+    def __call__(self, robot, env, task):
+        lin_cmd = task.cmd[:2]
+        lin_vel = robot.get_velocimeter()[:2]
+        proj_vel = np.dot(lin_cmd, lin_vel)
+        ort_vel = tf.vnorm(lin_vel - lin_cmd[:2] * proj_vel)
+        # print(proj_vel, ort_vel)
+        ort_pen = 1 - self.ort_reshape(ort_vel)
+        if (lin_cmd == 0.).all():
+            return ort_pen
+        proj_rew = self.reshape(self.get_desired_velocity(lin_cmd), proj_vel)
+        return ((1 - self.ort_weight) * proj_rew + self.ort_weight * ort_pen) * 1.5
 
     def get_desired_velocity(self, cmd):
-        return self.forward_lateral / math.hypot(self.lateral * cmd[0], self.forward * cmd[1])
+        return self.coeff / math.hypot(self.lateral * cmd[0], self.forward * cmd[1])
 
     @staticmethod
     def reshape(scale, value):
         return math.tanh(value * ATANH0_9 / scale)
-
-
-class UnifiedLinearReward(LinearVelocityReward):
-    def __init__(self, forward=1.5, lateral=1.2, ortho_upper=0.3, ortho_weight=0.33):
-        super().__init__(forward, lateral)
-        self.ortho_reshape = tanh2_reshape(0, ortho_upper)
-        self.ortho_weight = ortho_weight
-
-    def __call__(self, cmd, env, robot):
-        lin_vel = robot.getBaseLinearVelocityInBaseFrame()[:2]
-        proj_vel = np.dot(cmd[:2], lin_vel)
-        ortho_vel = math.hypot(*(lin_vel - cmd[:2] * proj_vel))
-        print(proj_vel, ortho_vel)
-        ortho_pen = 1 - self.ortho_reshape(ortho_vel)
-        if (cmd[:2] == 0.).all():
-            return ortho_pen
-        proj_rew = self.reshape(self.get_desired_velocity(cmd), proj_vel)
-        return ((1 - self.ortho_weight) * proj_rew + self.ortho_weight * ortho_pen) * 1.5
 
 
 class YawRateReward(Reward):
@@ -123,8 +112,8 @@ class YawRateReward(Reward):
         self.reshape_pos = tanh_reshape(-upper_pos, upper_pos)
         self.reshape_neg = quadratic_linear_reshape(upper_neg)
 
-    def __call__(self, cmd, env, robot):
-        yaw_cmd, yaw_rate = cmd[2], robot.getBaseRpyRate()[2]
+    def __call__(self, robot, env, task):
+        yaw_cmd, yaw_rate = task.cmd[2], robot.get_base_rpy_rate()[2]
         if yaw_cmd != 0.0:
             return self.reshape_pos(yaw_rate / yaw_cmd)
         else:
@@ -136,28 +125,28 @@ class RollPitchRatePenalty(Reward):
         self.dr_reshape = tanh2_reshape(0.0, dr_upper)
         self.dp_reshape = tanh2_reshape(0.0, dp_upper)
 
-    def __call__(self, cmd, env, robot):
-        r_rate, p_rate, _ = robot.getBaseRpyRate()
-        return 1 - (self.dr_reshape(abs(r_rate)) + self.dp_reshape(abs(p_rate))) / 2
+    def __call__(self, robot, env, task):
+        r_rate, p_rate, _ = robot.get_base_rpy_rate()
+        return 1 - (self.dr_reshape(abs(r_rate)) +
+                    self.dp_reshape(abs(p_rate))) / 2
 
 
-class OrthogonalLinearPenalty(Reward):
-    def __init__(self, linear_upper=0.3):
-        self.reshape = tanh2_reshape(0, linear_upper)
-
-    def __call__(self, cmd, env, robot):
-        linear = robot.getBaseLinearVelocityInBaseFrame()[:2]
-        v_o = np.asarray(linear) - np.asarray(cmd[:2]) * np.dot(linear, cmd[:2])
-        return 1 - self.reshape(tf.vnorm(v_o))
+# class OrthogonalLinearPenalty(Reward):
+#     def __init__(self, linear_upper=0.3):
+#         self.reshape = tanh2_reshape(0, linear_upper)
+#
+#     def __call__(self, robot, env, task):
+#         linear = robot.get_velocimeter()[:2]
+#         v_o = np.asarray(linear) - np.asarray(cmd[:2]) * np.dot(linear, cmd[:2])
+#         return 1 - self.reshape(tf.vnorm(v_o))
 
 
 class VerticalLinearPenalty(Reward):
     def __init__(self, upper=0.4):
         self.reshape = quadratic_linear_reshape(upper)
 
-    def __call__(self, cmd, env, robot):
-        return 1 - self.reshape(env.getTerrainBasedVerticalVelocityOfRobot())
-        # return 1 - self.reshape(robot.getBaseLinearVelocityInBaseFrame()[2])
+    def __call__(self, robot, env, task):
+        return 1 - self.reshape(robot.get_velocimeter()[2])
 
 
 class BodyPosturePenalty(Reward):
@@ -165,8 +154,12 @@ class BodyPosturePenalty(Reward):
         self.roll_reshape = quadratic_linear_reshape(roll_upper)
         self.pitch_reshape = quadratic_linear_reshape(pitch_upper)
 
-    def __call__(self, cmd, env, robot):
-        r, p, _ = env.getTerrainBasedRpyOfRobot()
+    def __call__(self, robot, env, task):
+        trnZ = env.get_interact_terrain_normal()
+        robot_rot = robot.get_base_rot()
+        trnY = tf.vcross(trnZ, robot_rot[:, 0])
+        trnX = tf.vcross(trnY, trnZ)
+        r, p, _ = tf.Rpy.from_rotation(np.array((trnX, trnY, trnZ)) @ robot_rot)
         return 1 - (self.roll_reshape(r) + self.pitch_reshape(p)) / 2
 
 
@@ -175,16 +168,16 @@ class BodyHeightReward(Reward):
         self.des = des
         self.reshape = quadratic_linear_reshape(range_)
 
-    def __call__(self, cmd, env, robot):
-        return env.getTerrainBasedHeightOfRobot()
+    def __call__(self, robot, env, task):
+        return env.get_relative_robot_height()
 
 
 class ActionSmoothnessReward(Reward):
     def __init__(self, upper=400):
         self.reshape = exp_m2_reshape(upper)
 
-    def __call__(self, cmd, env, robot):
-        return self.reshape(env.getActionViolence()).sum() / 12
+    def __call__(self, robot, env, task):
+        return self.reshape(env.get_action_accel()).sum() / 12
 
 
 class JointMotionPenalty(Reward):
@@ -192,35 +185,35 @@ class JointMotionPenalty(Reward):
         self.vel_reshape = np.vectorize(quadratic_linear_reshape(vel_upper))
         self.acc_reshape = np.vectorize(quadratic_linear_reshape(acc_upper))
 
-    def __call__(self, cmd, env, robot):
-        pen = self.vel_reshape(robot.getJointVelocities()) + self.acc_reshape(robot.getJointAccelerations())
+    def __call__(self, robot, env, task):
+        pen = self.vel_reshape(robot.get_joint_vel()) + self.acc_reshape(robot.get_joint_acc())
         return 1 - pen.sum() / 12
 
 
-class TorqueGradientPenalty(Reward):
-    def __init__(self, upper=200):
-        self.reshape = quadratic_linear_reshape(upper)
-
-    def __call__(self, cmd, env, robot):
-        torque_grad = robot.getTorqueGradients()
-        return -sum(self.reshape(grad) for grad in torque_grad) / 12
+# class TorqueGradientPenalty(Reward):
+#     def __init__(self, upper=200):
+#         self.reshape = quadratic_linear_reshape(upper)
+#
+#     def __call__(self, cmd, env, robot):
+#         torque_grad = robot.getTorqueGradients()
+#         return -sum(self.reshape(grad) for grad in torque_grad) / 12
 
 
 class FootSlipPenalty(Reward):
     def __init__(self, upper=0.5):
         self.reshape = np.vectorize(quadratic_linear_reshape(upper))
 
-    def __call__(self, cmd, env, robot):
-        return 1 - sum(self.reshape(robot.getFootSlipVelocity()))
+    def __call__(self, robot, env, task):
+        return 1 - sum(self.reshape(robot.get_slip_vel()))
 
 
-class HipAnglePenalty(Reward):
-    def __init__(self, upper=0.3):
-        self.reshape = np.vectorize(quadratic_linear_reshape(upper))
-
-    def __call__(self, cmd, env, robot):
-        hip_angles = robot.getJointPositions()[(0, 3, 6, 9),]
-        return -sum(self.reshape(hip_angles)) / 4
+# class HipAnglePenalty(Reward):
+#     def __init__(self, upper=0.3):
+#         self.reshape = np.vectorize(quadratic_linear_reshape(upper))
+#
+#     def __call__(self, cmd, env, robot):
+#         hip_angles = robot.getJointPositions()[(0, 3, 6, 9),]
+#         return -sum(self.reshape(hip_angles)) / 4
 
 
 class JointConstraintPenalty(Reward):
@@ -229,58 +222,60 @@ class JointConstraintPenalty(Reward):
         self.thigh_reshape = np.vectorize(soft_constrain(constraints[1], upper[1]))
         self.shank_reshape = np.vectorize(soft_constrain(constraints[2], upper[2]))
 
-    def __call__(self, cmd, env, robot):
-        joint_angles = robot.getJointPositions() - robot.STANCE_POSTURE
+    def __call__(self, robot, env, task):
+        joint_angles = robot.get_joint_pos() - robot.STANCE_CONFIG
         return (self.hip_reshape(joint_angles[((0, 3, 6, 9),)]).sum() +
                 self.thigh_reshape(joint_angles[((1, 4, 7, 10),)]).sum() +
                 self.shank_reshape(joint_angles[((2, 5, 8, 11),)]).sum()) / 12
 
 
-class TrivialStridePenalty(Reward):
-    def __init__(self, lower=-0.2, upper=0.4):
-        self.reshape = tanh_reshape(lower, upper)
-
-    def __call__(self, cmd, env, robot):
-        strides = [np.dot(s, cmd[:2]) for s in robot.getStrides()]
-        return sum(self.reshape(s) for s in strides if s != 0.0)
-        # return 1 - sum(1 - self.reshape(s) for s in strides if s != 0.0)
+# class TrivialStridePenalty(Reward):
+#     def __init__(self, lower=-0.2, upper=0.4):
+#         self.reshape = tanh_reshape(lower, upper)
+#
+#     def __call__(self, robot, env, task):
+#         strides = [np.dot(s, cmd[:2]) for s in robot.get_strides()]
+#         return sum(self.reshape(s) for s in strides if s != 0.0)
+#         # return 1 - sum(1 - self.reshape(s) for s in strides if s != 0.0)
 
 
 class FootClearanceReward(Reward):
     def __init__(self, upper=0.08):
         self.reshape = tanh2_reshape(0., upper)
 
-    def __call__(self, cmd, env, robot):
-        foot_clearances = robot.getFootClearances()
+    def __call__(self, robot, env, task):
+        foot_clearances = robot.get_clearances()
         return sum(self.reshape(c) for c in foot_clearances)
 
 
 class AliveReward(Reward):
-    def __call__(self, cmd, env, robot):
+    def __call__(self, robot, env, task):
         return 1.0
 
 
 class ClearanceOverTerrainReward(Reward):
-    def __call__(self, cmd, env, robot):
+    def __call__(self, robot, env, task):
         reward = 0.
-        for leg in range(4):
-            x, y, z = robot.getFootPositionInWorldFrame(leg)
-            if z - robot.FOOT_RADIUS > max(env.getTerrainScan(x, y, robot.rpy.y)) + 0.01:
+        for x, y, z in robot.get_foot_pos():
+            terrain_extremum = env.arena.get_peak((x - 0.1, x + 0.1),
+                                                  (y - 0.1, y + 0.1))[2]
+            if z - robot.FOOT_RADIUS > terrain_extremum + 0.01:
                 reward += 1 / 2
         return reward
 
 
 class BodyCollisionPenalty(Reward):
-    def __call__(self, cmd, env, robot):
-        contact_states = list(robot.getContactStates())
-        for i in range(1, 5):
-            contact_states[i * 3] = 0
-        return 1 - sum(contact_states)
+    def __call__(self, robot, env, task):
+        contact_sum = 0
+        for i, contact in enumerate(robot.get_leg_contacts()):
+            if contact and i % 3 != 2:
+                contact_sum += 1
+        return 1 - contact_sum
 
 
 class TorquePenalty(Reward):
     def __init__(self, upper=900):
         self.reshape = np.vectorize(quadratic_linear_reshape(upper))
 
-    def __call__(self, cmd, env, robot):
-        return 1 - sum(self.reshape(robot.getLastAppliedTorques() ** 2))
+    def __call__(self, robot, env, task):
+        return 1 - sum(self.reshape(robot.get_last_torque() ** 2))

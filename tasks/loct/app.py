@@ -2,7 +2,7 @@ import sys
 import time
 
 import qdpgym
-from qdpgym.sim.app import Application
+import qdpgym.sim as sim
 from qdpgym.tasks.loct import LocomotionV0
 from qdpgym.utils import log
 
@@ -44,21 +44,19 @@ class GamepadCommander(object):
         self.gamepad.disconnect()
 
 
-class LocomotionApp(Application):
+class LocomotionApp(sim.Application):
     def __init__(self, policy, gamepad='Xbox'):
-        from qdpgym.sim import QuadrupedEnv, Aliengo, hooks, NullTerrain
-
-        robot = Aliengo(500, 'actuator_net', noisy=False)
+        robot = sim.Aliengo(500, 'actuator_net', noisy=False)
         task = LocomotionV0()
         if qdpgym.sim_engine == qdpgym.Sim.BULLET:
-            arena = NullTerrain()
-            task.add_hook(hooks.ExtraViewerBtHook())
-            task.add_hook(hooks.RandomTerrainBtHook())
-            # task.add_hook(hooks.RandomPerturbBtHook())
+            arena = sim.TerrainBase()
+            task.add_hook(sim.ExtraViewerHook())
+            task.add_hook(sim.RandomTerrainHook())
+            task.add_hook(sim.RandomPerturbHook())
             # task.add_hook(hooks.VideoRecorderBtHook())
         else:
             raise NotImplementedError
-        env = QuadrupedEnv(robot, arena, task)
+        env = sim.QuadrupedEnv(robot, arena, task)
         super().__init__(robot, env, task, policy)
         if gamepad and GamepadCommander.is_available():
             self.add_callback(GamepadCommander(gamepad).callback)

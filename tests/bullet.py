@@ -7,10 +7,10 @@ import pybullet as pyb
 import pybullet_data
 import torch
 
-from qdpgym.sim.blt.env import QuadrupedEnvBt
-from qdpgym.sim.blt.hooks import ViewerBtHook
-from qdpgym.sim.blt.quadruped import AliengoBt
-from qdpgym.sim.blt.terrain import PlainBt, HillsBt, SlopesBt, StepsBt, PlainHfBt
+from qdpgym.sim.blt.env import QuadrupedEnv
+from qdpgym.sim.blt.hooks import ViewerHook
+from qdpgym.sim.blt.quadruped import Aliengo
+from qdpgym.sim.blt.terrain import Plain, Hills, Slopes, Steps, PlainHf
 from qdpgym.sim.task import NullTask
 from qdpgym.tasks.loct import LocomotionV0
 from qdpgym.utils import tf
@@ -22,8 +22,8 @@ class BulletTestCase(unittest.TestCase):
         pyb.connect(pyb.GUI)
         pyb.setTimeStep(2e-3)
         pyb.setAdditionalSearchPath(pybullet_data.getDataPath())
-        PlainBt().spawn(pyb)
-        rob = AliengoBt(500, 'pd')
+        Plain().spawn(pyb)
+        rob = Aliengo(500, 'pd')
         rs = np.random.RandomState()
         rob.spawn(pyb, rs)
         pyb.setGravity(0, 0, -9.8)
@@ -37,11 +37,11 @@ class BulletTestCase(unittest.TestCase):
         pyb.disconnect()
 
     def test_env(self):
-        rob = AliengoBt(500, 'pd')
-        arena = PlainBt()
+        rob = Aliengo(500, 'pd')
+        arena = Plain()
         task = NullTask()
-        task.add_hook(ViewerBtHook())
-        env = QuadrupedEnvBt(rob, arena, task)
+        task.add_hook(ViewerHook())
+        env = QuadrupedEnv(rob, arena, task)
         env.init_episode()
         for _ in range(1000):
             env.step(rob.STANCE_CONFIG)
@@ -49,8 +49,8 @@ class BulletTestCase(unittest.TestCase):
     def test_replaceHeightfield(self):
         pyb.connect(pyb.GUI)
         pyb.setRealTimeSimulation(True)
-        terrains = [PlainHfBt.default(), HillsBt.default(),
-                    StepsBt.default(), SlopesBt.default()]
+        terrains = [PlainHf.default(), Hills.default(),
+                    Steps.default(), Slopes.default()]
         current = None
         for i in range(5):
             for terrain in terrains:
@@ -67,7 +67,7 @@ class BulletTestCase(unittest.TestCase):
     def test_terrainApi(self):
         pyb.connect(pyb.GUI)
         pyb.setRealTimeSimulation(True)
-        terrain = HillsBt.make(20, 0.1, (0.5, 10), random_state=np.random)
+        terrain = Hills.make(20, 0.1, (0.5, 10), random_state=np.random)
         # terrain = StepsBt.make(20, 0.1, 1.0, 0.5, random_state=np.random)
         # terrain = SlopesBt.make(20, 0.1, np.pi / 6, 0.5)
         terrain.spawn(pyb)
@@ -134,7 +134,7 @@ class BulletTestCase(unittest.TestCase):
                         vectors[idx], (x, y, h), vec_orn
                     )
             time.sleep(3)
-            new = HillsBt.make(20, 0.1, (np.random.random(), 10), random_state=np.random)
+            new = Hills.make(20, 0.1, (np.random.random(), 10), random_state=np.random)
             new.replace(pyb, terrain)
             terrain = new
 
@@ -142,10 +142,10 @@ class BulletTestCase(unittest.TestCase):
 
     def test_parallel(self):
         def make_env():
-            rob = AliengoBt(500, 'pd')
-            arena = PlainBt()
+            rob = Aliengo(500, 'pd')
+            arena = Plain()
             task = LocomotionV0()
-            return QuadrupedEnvBt(rob, arena, task)
+            return QuadrupedEnv(rob, arena, task)
 
         env = ParallelWrapper(make_env, 4)
         env.init_episode()

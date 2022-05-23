@@ -1,5 +1,5 @@
 import collections
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Any
 
 from .abc import Task, Hook, Quadruped, Environment
 
@@ -23,11 +23,12 @@ class NullTask(Task):
             hook.initialize(self._robot, self._env, random_state)
 
     def add_hook(self, hook: Hook, name=None):
-        self._hooks.append(hook)
         if name is None:
             name = hook.__class__.__name__
         if name in self._hook_names:
             raise ValueError(f'Duplicated Hook `{name}`')
+        hook.register_task(self)
+        self._hooks.append(hook)
         self._hook_names.add(name)
         return self
 
@@ -77,10 +78,10 @@ class NullTask(Task):
 
 
 class RewardRegistry(object):
-    def __init__(self, robot, env, task):
-        self._robot = robot
-        self._env = env
-        self._task = task
+    def __init__(self):
+        self._robot = None
+        self._env = None
+        self._task = None
 
         self._rewards_set = set()
         self._rewards_weights = []
@@ -88,12 +89,17 @@ class RewardRegistry(object):
         self._coefficient = 1.0
         self._reward_details = {}
 
-    def add_reward(self, name: str, obj: Callable, weight: float):
+    def register_task(self, robot, env, task):
+        self._robot, self._env, self._task = robot, env, task
+
+    def add_reward(self, name: str,
+                   reward_obj: Callable[..., float],
+                   weight: float):
         if name in self._rewards_set:
             raise RuntimeError(f'Duplicated Reward Type {name}')
         self._rewards_set.add(name)
         self._weight_sum += weight
-        self._rewards_weights.append((obj, weight))
+        self._rewards_weights.append((reward_obj, weight))
 
     def set_coeff(self, coeff):
         self._coefficient = coeff
@@ -116,10 +122,10 @@ class RewardRegistry(object):
         self._reward_details.clear()
         reward_value = 0.0
         for reward, weight in self._rewards_weights:
-            rew = reward(self._robot, self._env)
+            rew = reward(self._robot, self._env, self._task)
             self._reward_details[reward.__class__.__name__] = rew
             reward_value += rew * weight
-        reward_value /= self._coefficient
+        reward_value *= self._coefficient
         if detailed:
             return reward_value, self._reward_details
         else:
@@ -127,9 +133,10 @@ class RewardRegistry(object):
 
 
 class BasicTask(NullTask):
-    def __init__(self, reward_coeff=1.0, substep_reward_on=True):
-        self._reward_registry: Optional[RewardRegistry] = None
-        self._reward_coeff = reward_coeff
+    ALL_REWARDS: Any
+
+    def __init__(self, substep_reward_on=True):
+        self._reward_registry = RewardRegistry()
         self._substep_reward_on = substep_reward_on
         self._reward = 0.
         self._reward_details = collections.defaultdict(float)
@@ -138,13 +145,15 @@ class BasicTask(NullTask):
         super().__init__()
 
     def add_reward(self, name: str, weight: float):
-        reward_class = eval(name)
+        reward_class = getattr(self.ALL_REWARDS, name)
         self._reward_registry.add_reward(name, reward_class(), weight)
+
+    def set_reward_coeff(self, value):
+        self._reward_registry.set_coeff(value)
 
     def register_env(self, robot, env, random_state):
         super().register_env(robot, env, random_state)
-        self._reward_registry = RewardRegistry(robot, env, self)
-        self._reward_registry.set_coeff(self._reward_coeff)
+        self._reward_registry.register_task(robot, env, self)
 
     def after_substep(self):
         if self._substep_reward_on:

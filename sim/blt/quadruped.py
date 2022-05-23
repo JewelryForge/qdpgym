@@ -2,7 +2,8 @@ import collections
 import math
 import os
 import os.path
-from typing import Optional, Deque, Union, List
+from dataclasses import field, dataclass
+from typing import Optional, Deque, Union, List, Tuple, Any
 
 import numpy as np
 import pybullet as pyb
@@ -107,7 +108,7 @@ class AliengoModelBt(object):
         return self._joint_ids[leg * 4 + joint_type]
 
 
-class AliengoBt(Quadruped):
+class Aliengo(Quadruped):
     LINK_LENGTHS = (0.083, 0.25, 0.25)
     HIP_OFFSETS = ((0.2399, -0.051, 0.), (0.2399, 0.051, 0.),
                    (-0.2399, -0.051, 0), (-0.2399, 0.051, 0.))
@@ -120,6 +121,15 @@ class AliengoBt(Quadruped):
                              (0., -LINK_LENGTHS[0], -0.4), (0., LINK_LENGTHS[0], -0.4))
     JOINT_LIMITS = ((-1.22, 1.22), (None, None), (-2.77, -0.7)) * 4
     TORQUE_LIMITS = 44.4
+
+    @dataclass
+    class LocomotionInfo:
+        time: float = 0.
+        last_stance_states: Any = field(default_factory=lambda: [None] * 4)
+        max_foot_heights: np.ndarray = field(default_factory=lambda: np.zeros(4))
+        foot_clearances: np.ndarray = field(default_factory=lambda: np.zeros(4))
+        strides: List[Tuple[float, float]] = field(default_factory=lambda: [(0., 0.)] * 4)
+        slips: List[float] = field(default_factory=lambda: [0.] * 4)
 
     def __init__(self, frequency: int, motor: str, noisy=True):
         self._freq = frequency
@@ -148,6 +158,7 @@ class AliengoBt(Quadruped):
         self._state_history: Deque[Snapshot] = collections.deque(maxlen=100)
         self._cmd: Optional[Command] = None
         self._cmd_history: Deque[Command] = collections.deque(maxlen=100)
+        self._locom: Optional[Aliengo.LocomotionInfo] = None
 
         self._init_pose = ((0., 0., self.STANCE_HEIGHT), (0., 0., 0., 1.))
         self._random_dynamics = False
@@ -220,6 +231,14 @@ class AliengoBt(Quadruped):
         if self._noisy_on and self._latency_range is not None:
             self._noisy.latency = random_state.uniform(*self._latency_range)
 
+        self._state = None
+        self._state_history.clear()
+        self._cmd = None
+        self._cmd_history.clear()
+        self._locom = Aliengo.LocomotionInfo()
+        if self._noisy is not None:
+            self._noisy.reset()
+
     def update_observation(self, random_state, minimal=False):
         """Get robot states from pybullet"""
         if minimal:
@@ -257,6 +276,34 @@ class AliengoBt(Quadruped):
 
         # self._motor.update_observation(self._state.joints_pos, self._state.joints_vel)
         self._motor.update_observation(self.noisy.get_joint_pos(), self.noisy.get_joint_vel())
+
+        l = self._locom
+        l.time += 1 / self._freq
+        rolling_vel = s.joint_vel[((1, 4, 7, 10),)] + s.joint_vel[((2, 5, 8, 11),)]
+        for i, (contact, foot_pos, rv) in enumerate(
+                zip(s.leg_contacts[((2, 5, 8, 11),)], s.foot_pos, rolling_vel)
+        ):
+            if not contact:
+                l.strides[i] = (0., 0.)
+                l.slips[i] = l.foot_clearances[i] = 0.
+                l.max_foot_heights[i] = max(l.max_foot_heights[i], foot_pos[2])
+                continue
+            if l.last_stance_states[i] is not None:
+                time, pos = l.last_stance_states[i]
+                duration = l.time - time
+                if duration >= 0.05:
+                    # Take as stride
+                    l.strides[i] = (foot_pos - pos)[:2]
+                    l.slips[i] = 0.
+                    l.foot_clearances[i] = l.max_foot_heights[i] - pos[2]
+                else:
+                    # Take as slip and estimate slip velocity
+                    l.slips[i] = abs(tf.vnorm((foot_pos - pos)[:2]) -
+                                     self.FOOT_RADIUS * rv * duration)
+                    l.strides[i] = (0., 0.)
+                    l.foot_clearances[i] = 0.
+            l.max_foot_heights[i] = foot_pos[2]
+            l.last_stance_states[i] = (l.time, foot_pos)
 
     def apply_command(self, motor_commands: ARRAY_LIKE):
         """
@@ -343,11 +390,27 @@ class AliengoBt(Quadruped):
     def get_force_sensor(self):
         return self._state.force_sensor
 
+    def get_slip_vel(self):
+        return np.array(self._locom.slips) * self._freq
+
+    def get_strides(self):
+        return np.array(self._locom.strides)
+
+    def get_clearances(self):
+        return self._locom.foot_clearances
+
     def get_joint_pos(self) -> np.ndarray:
         return self._state.joint_pos
 
     def get_joint_vel(self) -> np.ndarray:
         return self._state.joint_vel
+
+    def get_joint_acc(self) -> np.ndarray:
+        if len(self._state_history) > 2:
+            prev_joint_vel = self._state_history[-2].joint_vel
+            return (self._state.joint_vel - prev_joint_vel) * self._freq
+
+        return np.zeros(12)
 
     def get_last_command(self) -> np.ndarray:
         return self._cmd.command if self._cmd is not None else None
@@ -361,18 +424,23 @@ class AliengoBt(Quadruped):
 
     def _get_foot_states(self):
         """Get foot positions, orientations and forces by getLinkStates and getContactPoints."""
-        link_states = self._sim_env.getLinkStates(self._body_id, self._foot_ids)
-        foot_positions = [ls[0] for ls in link_states]
-        foot_orientations = [ls[1] for ls in link_states]
-        contact_points = self._sim_env.getContactPoints(bodyA=self._body_id)
-        contact_dict = collections.defaultdict(lambda: np.zeros(3))
-        for p in contact_points:
-            link_idx = p[3]
-            directions = p[7], p[11], p[13]
-            forces = p[9], p[10], p[12]
-            contact_dict[link_idx] += sum(np.array(d) * f for d, f in zip(directions, forces))
-        foot_forces = [contact_dict[foot_id] for foot_id in self._foot_ids]
-        return np.array(foot_positions), np.array(foot_orientations), np.array(foot_forces)
+        foot_states = self._sim_env.getLinkStates(self._body_id, self._foot_ids)
+        foot_pos, foot_orn = [], []
+        for foot_state in foot_states:
+            foot_pos.append(foot_state[0])
+            foot_orn.append(foot_state[1])
+
+        foot_forces = []
+        for foot_id in self._foot_ids:
+            contact_points = self._sim_env.getContactPoints(bodyA=self._body_id, linkIndexA=foot_id)
+            foot_force = np.zeros(3)
+            for p in contact_points:
+                for axis_idx, force_idx in zip((7, 11, 13), (9, 10, 12)):
+                    axis = p[axis_idx]
+                    force = p[force_idx]
+                    foot_force += np.array(axis) * force
+            foot_forces.append(foot_force)
+        return np.array(foot_pos), np.array(foot_orn), np.array(foot_forces)
 
     def _get_contact_states(self):
         def _get_contact_state(link_id):

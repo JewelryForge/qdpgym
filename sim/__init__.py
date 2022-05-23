@@ -28,14 +28,10 @@ if qdpgym.sim_engine == qdpgym.Sim.MUJOCO:
     raise NotImplementedError
 else:
     assert is_bullet_available(), 'pybullet is not installed'
-    from .blt.quadruped import AliengoBt as Aliengo
-    from .blt.env import QuadrupedEnvBt as QuadrupedEnv
-    from .blt.terrain import TerrainBt as NullTerrain
-    from .blt.terrain import HillsBt as Hills
-    import qdpgym.sim.blt.hooks as hooks
-    import qdpgym.sim.blt.terrain as terrain
+    from .blt.quadruped import Aliengo
+    from .blt.env import QuadrupedEnv
+    from .blt.terrain import *
+    from .blt.hooks import *
 
-    from .blt.hooks import ViewerBtHook as ViewerHook
-    from .blt.hooks import ExtraViewerBtHook as ExtraViewerHook
-    from .blt.hooks import RandomPerturbBtHook as RandomPerturbHook
-    from .blt.hooks import RandomTerrainBtHook as RandomTerrainHook
+from .abc import *
+from .app import Application

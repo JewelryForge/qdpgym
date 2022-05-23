@@ -1,14 +1,16 @@
 import functools
 import logging
 import math
+import re
 import time
 from datetime import datetime
 from typing import Sequence, Callable, Optional, Union
 
 import numpy as np
+import yaml
 
 __all__ = ['make_part', 'Angle', 'replace_is', 'replace_eq', 'colored_str', 'log',
-           'MfTimer', 'get_padded', 'PadWrapper', 'get_timestamp']
+           'MfTimer', 'get_padded', 'PadWrapper', 'get_timestamp', 'YamlLoader']
 
 
 class make_part(functools.partial):
@@ -262,3 +264,65 @@ log = _Log
 def get_timestamp(timestamp: Union[int, float] = None) -> str:
     datetime_ = datetime.fromtimestamp(timestamp) if timestamp else datetime.now()
     return datetime_.strftime('%y-%m-%d_%H-%M-%S')
+
+
+class _NamespaceWrapper(object):
+    def __init__(self, data: dict):
+        self._data = data
+
+    def __getattr__(self, item):
+        print(item)
+        try:
+            value = self._data[item]
+        except KeyError:
+            value = getattr(self._data, item)
+        if isinstance(value, dict):
+            return _NamespaceWrapper(value)
+        else:
+            return value
+
+    def __setattr__(self, key, value):
+        if key.startswith('_'):
+            super().__setattr__(key, value)
+        else:
+            self._data[key] = value
+
+    def __getitem__(self, item):
+        return self._data[item]
+
+    def __setitem__(self, key, value):
+        self._data[key] = value
+
+    def __repr__(self):
+        return f'Wrapper({self._data})'
+
+
+class YamlLoader(_NamespaceWrapper):
+    def __init__(self, path):
+        loader = yaml.SafeLoader
+        # See https://stackoverflow.com/questions/30458977/yaml-loads-5e-6-as-string-and-not-a-number
+        loader.add_implicit_resolver(
+            u'tag:yaml.org,2002:float',
+            re.compile(u'''^(?:
+             [-+]?(?:[0-9][0-9_]*)\\.[0-9_]*(?:[eE][-+]?[0-9]+)?
+            |[-+]?(?:[0-9][0-9_]*)(?:[eE][-+]?[0-9]+)
+            |\\.[0-9_]+(?:[eE][-+][0-9]+)?
+            |[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\\.[0-9_]*
+            |[-+]?\\.(?:inf|Inf|INF)
+            |\\.(?:nan|NaN|NAN))$''', re.X),
+            list(u'-+0123456789.'))
+
+        with open(path, encoding='utf-8') as f:
+            super().__init__(yaml.load(f, Loader=loader))
+
+    @property
+    def data(self):
+        return self._data
+
+    @property
+    def args(self):
+        return ()
+
+    @property
+    def kwargs(self):
+        return {}

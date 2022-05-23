@@ -3,19 +3,24 @@ from typing import Optional
 
 import numpy as np
 
-from qdpgym.sim.abc import Quadruped, Environment, QuadrupedHandle
+from qdpgym.sim.abc import Quadruped, Environment, QuadrupedHandle, Hook
 from qdpgym.sim.common.tg import TgStateMachine, vertical_tg
 from qdpgym.sim.task import BasicTask
+from qdpgym.utils import tf
+import qdpgym.tasks.loct.reward as all_rewards
 
 
 class LocomotionV0(BasicTask):
-    def __init__(self, reward_coeff=1.0, substep_reward_on=True):
-        super().__init__(reward_coeff, substep_reward_on)
+    ALL_REWARDS = all_rewards
+
+    def __init__(self, substep_reward_on=True):
+        super().__init__(substep_reward_on)
         self._cmd = np.array((0., 0., 0.))
         self._traj_gen: Optional[TgStateMachine] = None
 
         self._weights: Optional[np.ndarray] = None
         self._bias: Optional[np.ndarray] = None
+        self._action_weights = np.array((0.2, 0.2, 0.1) * 4)
 
     @property
     def cmd(self):
@@ -27,16 +32,15 @@ class LocomotionV0(BasicTask):
 
     def register_env(self, robot, env, random_state):
         super().register_env(robot, env, random_state)
+        robot.set_latency(0., 0.03)
+        robot.set_random_dynamics(True)
         self._traj_gen = TgStateMachine(env.timestep * env.num_substeps,
                                         random_state, vertical_tg(0.12))
         self._build_weights_and_bias()
 
-    def process_action(self, action):
-        return action * np.array((0.2, 0.2, 0.1) * 4)
-
     def before_step(self, action):
         action = super().before_step(action)
-        action = self.process_action(action)
+        action = action * self._action_weights
         self._traj_gen.update()
         priori = self._traj_gen.get_priori_trajectory().reshape(4, 3)
         des_pos = action.reshape(4, 3) + priori
@@ -106,17 +110,38 @@ class LocomotionV0(BasicTask):
             tg_base_freq
         )) - self._bias) * self._weights
 
+    def is_failed(self):
+        r = self._robot.get_base_rpy()[0]
+        rel_h = self._env.get_relative_robot_height()
+        if (
+                rel_h < self._robot.STANCE_HEIGHT * 0.5 or
+                rel_h > self._robot.STANCE_HEIGHT * 1.5 or
+                r < -np.pi / 3 or r > np.pi / 3 or
+                self._robot.get_torso_contact()
+        ):
+            return True
+        return False
+
     def _collect_terrain_info(self):
         yaw = self._robot.get_base_rpy()[2]
         dx, dy = 0.1 * math.cos(yaw), 0.1 * math.sin(yaw)
         points = ((dx - dy, dx + dy), (dx, dy), (dx + dy, -dx + dy),
                   (-dy, dx), (0, 0), (dy, -dx),
                   (-dx - dy, dx - dy), (-dx, -dy), (-dx + dy, -dx - dy))
-        samples = []
+        scan = []
         for x, y, z in self._robot.get_foot_pos():
             for px, py in points:
-                samples.append(z - self._env.arena.get_height(x + px, y + py))
-        return np.concatenate((samples, np.zeros(8)))
+                scan.append(z - self._env.arena.get_height(x + px, y + py))
+
+        slopes = []
+        for x, y, z in self._robot.get_foot_pos():
+            trnZ = self._env.arena.get_normal(x, y)
+            sy, cy = np.sin(yaw), np.cos(yaw)
+            trnX = tf.vcross((-sy, cy, 0), trnZ)
+            trnX /= tf.vnorm(trnX)
+            trnY = tf.vcross(trnZ, trnX)
+            slopes.extend((np.arcsin(trnX[2]), np.arcsin(trnY[2])))
+        return np.concatenate((scan, slopes))
 
     def _build_weights_and_bias(self):
         self._weights = np.concatenate((
@@ -164,3 +189,37 @@ class LocomotionV0(BasicTask):
             stance_cfg,  # joint target history
             (self._traj_gen.base_frequency,)  # tg base freq
         ))
+
+
+class RandomCommandSetterHook(Hook):
+    def __init__(self):
+        self._task: Optional[LocomotionV0] = None
+        self._stop_prob = 0.2
+        self._forward_prob = 0.05
+        self._interval_range = (0.5, 5.)
+        self._interval = 0
+        self._last_update = 0
+
+    def register_task(self, task):
+        self._task = task
+
+    def get_random_cmd(self, random_state):
+        angular_cmd = random_state.choice((-1., 0, 0, 1.))
+        cmd_choice = random_state.random()
+        if cmd_choice < self._stop_prob:
+            return np.array((0., 0., angular_cmd))
+        elif cmd_choice < self._stop_prob + self._forward_prob:
+            return np.array((1., 0., angular_cmd))
+        else:
+            yaw = random_state.uniform(0, math.tau)
+            return np.array((math.cos(yaw), math.sin(yaw), angular_cmd))
+
+    def init_episode(self, robot, env, random_state):
+        self._task.cmd = self.get_random_cmd(random_state)
+        self._interval = random_state.uniform(*self._interval_range)
+
+    def after_step(self, robot, env, random_state):
+        if env.sim_time >= self._last_update + self._interval:
+            self._task.cmd = self.get_random_cmd(random_state)
+            self._last_update = env.sim_time
+            self._interval = random_state.uniform(*self._interval_range)
