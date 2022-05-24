@@ -155,6 +155,11 @@ class BasicTask(NullTask):
         super().register_env(robot, env, random_state)
         self._reward_registry.register_task(robot, env, self)
 
+    def before_step(self, action):
+        self._reward = 0.
+        self._reward_details.clear()
+        return super().before_step(action)
+
     def after_substep(self):
         if self._substep_reward_on:
             reward, reward_details = self._reward_registry.calc_reward(detailed=True)

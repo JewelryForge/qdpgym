@@ -2,6 +2,7 @@ import itertools
 import time
 import unittest
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pybullet as pyb
 import pybullet_data
@@ -165,6 +166,11 @@ class BulletTestCase(unittest.TestCase):
         for _ in range(10):
             obs = env.step(torch.zeros(4, 12))
             print(obs)
+
+    def test_reward_reshape(self):
+        x = np.arange(-2, 2, 0.01)
+        plt.plot(x, np.tanh(x))
+        plt.show()
 
 
 if __name__ == '__main__':
