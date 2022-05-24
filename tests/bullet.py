@@ -12,7 +12,7 @@ from qdpgym.sim.blt.hooks import ViewerHook
 from qdpgym.sim.blt.quadruped import Aliengo
 from qdpgym.sim.blt.terrain import Plain, Hills, Slopes, Steps, PlainHf
 from qdpgym.sim.task import NullTask
-from qdpgym.tasks.loct import LocomotionV0
+from qdpgym.tasks.loct import LocomotionV0, LocomotionV0Raw
 from qdpgym.utils import tf
 from qdpgym.utils.parallel import ParallelWrapper
 
@@ -145,6 +145,19 @@ class BulletTestCase(unittest.TestCase):
             rob = Aliengo(500, 'pd')
             arena = Plain()
             task = LocomotionV0()
+            return QuadrupedEnv(rob, arena, task)
+
+        env = ParallelWrapper(make_env, 4)
+        env.init_episode()
+        for _ in range(10):
+            obs = env.step(torch.zeros(4, 12))
+            print(obs)
+
+    def test_parallel_composed_obs(self):
+        def make_env():
+            rob = Aliengo(500, 'pd')
+            arena = Plain()
+            task = LocomotionV0Raw()
             return QuadrupedEnv(rob, arena, task)
 
         env = ParallelWrapper(make_env, 4)

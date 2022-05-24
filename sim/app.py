@@ -23,7 +23,7 @@ class Application(object):
             for _ in range(20000):
                 actions = self.policy(obs.observation)
                 for callback in self.callbacks:
-                    callback(self.task, self.robot, self.env)
+                    callback(self.robot, self.env, self.task)
                 obs = self.env.step(actions)
                 if obs.status == StepType.FAIL and allow_reset:
                     self.env.init_episode()

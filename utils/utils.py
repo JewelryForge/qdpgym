@@ -271,7 +271,6 @@ class _NamespaceWrapper(object):
         self._data = data
 
     def __getattr__(self, item):
-        print(item)
         try:
             value = self._data[item]
         except KeyError:

@@ -179,6 +179,10 @@ class Command:
     torque: np.ndarray = None
 
 
+class ComposedObs(tuple):
+    pass
+
+
 class Environment(metaclass=abc.ABCMeta):
     @property
     def robot(self) -> QuadrupedHandle:

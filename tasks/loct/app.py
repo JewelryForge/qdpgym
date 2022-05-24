@@ -30,7 +30,7 @@ class GamepadCommander(object):
         from qdpgym.thirdparty.gamepad import gamepad
         return gamepad.available()
 
-    def callback(self, task, robot, env):
+    def callback(self, robot, env, task):
         if self.gamepad.isConnected():
             x_speed = -self.gamepad.axis('LAS -Y')
             y_speed = -self.gamepad.axis('LAS -X')
@@ -57,6 +57,7 @@ class LocomotionApp(sim.Application):
         else:
             raise NotImplementedError
         env = sim.QuadrupedEnv(robot, arena, task)
+        # task.add_reward('UnifiedLinearReward')
         super().__init__(robot, env, task, policy)
         if gamepad and GamepadCommander.is_available():
             self.add_callback(GamepadCommander(gamepad).callback)

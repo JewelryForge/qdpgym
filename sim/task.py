@@ -144,7 +144,7 @@ class BasicTask(NullTask):
 
         super().__init__()
 
-    def add_reward(self, name: str, weight: float):
+    def add_reward(self, name: str, weight: float = 0.):
         reward_class = getattr(self.ALL_REWARDS, name)
         self._reward_registry.add_reward(name, reward_class(), weight)
 

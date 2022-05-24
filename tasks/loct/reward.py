@@ -81,7 +81,7 @@ def soft_constrain(thr, upper):
 
 
 class UnifiedLinearReward(Reward):
-    def __init__(self, forward=1.0, lateral=0.8, ort_upper=0.3, ort_weight=0.33):
+    def __init__(self, forward=1.5, lateral=1.2, ort_upper=0.3, ort_weight=0.33):
         self.forward, self.lateral = forward, lateral
         self.coeff = forward * lateral
         self.ort_reshape = tanh2_reshape(0, ort_upper)
