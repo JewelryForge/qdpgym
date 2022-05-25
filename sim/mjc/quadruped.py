@@ -113,7 +113,7 @@ class AliengoModelMj(base.Walker):
         self._foot_geom_ids = _get_entity_geoms(self._foot_bodies)
 
     def collect_contacts(self, physics):
-        torso_contact = 0
+        torso_contact = False
         leg_contacts = [0] * 12
         foot_contact_forces = np.zeros((4, 3))
         force_torque = np.zeros(6)
@@ -122,7 +122,7 @@ class AliengoModelMj(base.Walker):
             is_valid = contact.dist < contact.includemargin
             if geom1 == 0 and is_valid:
                 if geom2 in self._torso_geom_ids:
-                    torso_contact = 1
+                    torso_contact = True
                 elif geom2 in self._leg_geom_ids:
                     leg_contacts[self._leg_geom_ids.index(contact.geom2)] = 1
                     if contact.geom2 in self._foot_geom_ids:
@@ -201,7 +201,7 @@ class AliengoModelMj(base.Walker):
         return AliengoObservableMj(self)
 
 
-class AliengoMj(Quadruped):
+class Aliengo(Quadruped):
     LINK_LENGTHS = (0.083, 0.25, 0.25)
     HIP_OFFSETS = ((0.2399, -0.051, 0.), (0.2399, 0.051, 0.),
                    (-0.2399, -0.051, 0), (-0.2399, 0.051, 0.))
@@ -243,6 +243,8 @@ class AliengoMj(Quadruped):
         self._random_dynamics = False
         self._latency_range = None
 
+        self._init_pose = (0., 0., 0.)  # x, y, yaw
+
     @property
     def noisy(self) -> QuadrupedHandle:
         return self._noisy if self._noisy_on else self
@@ -263,7 +265,15 @@ class AliengoMj(Quadruped):
     def cmd_history(self):
         return ut.PadWrapper(self._cmd_history)
 
-    def add_to(self, arena: Arena, xy=None, yaw=None):
+    def set_init_pose(self, x=0., y=0., yaw=0.):
+        """
+        Set init pose before adding to an arena.
+        The pose may be modified by `add_to` to fit a terrain.
+        """
+
+        self._init_pose = (x, y, yaw)
+
+    def add_to(self, arena: Arena):
         if self._entity.parent is arena:
             attached = mjcf.get_attachment_frame(self._entity.mjcf_model)
         else:
@@ -272,17 +282,16 @@ class AliengoMj(Quadruped):
             attached = arena.attach(self._entity)
             self._entity.create_root_joints(attached)
 
-        if xy is None:
-            xy = (0., 0.)
+        x, y, yaw = self._init_pose
         foot_xy = (np.array(self.STANCE_FOOT_POSITIONS) + np.array(self.HIP_OFFSETS))[:, :2]
-        if yaw is not None:
+        if yaw != 0.:
             cy, sy = np.cos(yaw), np.sin(yaw)
             trans = np.array(((cy, -sy),
                               (sy, cy)))
             foot_xy = np.array([trans @ f_xy for f_xy in foot_xy])
         else:
             cy, sy = 1., 0.
-        foot_xy += xy
+        foot_xy += (x, y)
 
         terrain_points = []
         est_height = 0.
@@ -300,7 +309,7 @@ class AliengoMj(Quadruped):
             tf.Quaternion.from_rotation(np.array((trn_X, trn_Y, trn_Z)))
         )
 
-        attached.pos = (*xy, init_height)
+        attached.pos = (x, y, init_height)
         attached.quat = orn
 
     def init_mjcf_model(self, random_state):

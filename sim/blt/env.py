@@ -41,7 +41,7 @@ class QuadrupedEnv(Environment):
     def set_render(self, flag=True):
         self._render = flag
 
-    def init_episode(self, init_yaw=0.):
+    def init_episode(self):
         self._init = True
         self._num_sim_steps = 0
         self._action_history.clear()
@@ -59,7 +59,7 @@ class QuadrupedEnv(Environment):
 
         self._task.initialize_episode()
         self._arena.spawn(self._sim_env)
-        self._robot.add_to(self._arena, yaw=init_yaw)
+        self._robot.add_to(self._arena)
         self._robot.spawn(self._sim_env, self._random)
 
         for i in range(50):
@@ -140,7 +140,7 @@ class QuadrupedEnv(Environment):
         if self._task.is_failed():
             status = StepType.FAIL
             self._task.on_fail()
-        elif ((self._time_limit is not None and self.sim_time > self._time_limit)
+        elif ((self._time_limit is not None and self.sim_time >= self._time_limit)
               or self._task.is_succeeded()):
             status = StepType.SUCCESS
             self._task.on_success()

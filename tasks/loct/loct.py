@@ -38,6 +38,10 @@ class LocomotionV0(BasicTask):
                                         random_state, vertical_tg(0.12))
         self._build_weights_and_bias()
 
+    def initialize_episode(self):
+        self._robot.set_init_pose(yaw=self._random.random() * 2 * np.pi)
+        super().initialize_episode()
+
     def before_step(self, action):
         action = super().before_step(action)
         action = action * self._action_weights
@@ -112,12 +116,14 @@ class LocomotionV0(BasicTask):
 
     def is_failed(self):
         r = self._robot.get_base_rpy()[0]
+        x, y, _ = self._robot.get_base_pos()
         rel_h = self._env.get_relative_robot_height()
         if (
                 rel_h < self._robot.STANCE_HEIGHT * 0.5 or
                 rel_h > self._robot.STANCE_HEIGHT * 1.5 or
                 r < -np.pi / 3 or r > np.pi / 3 or
-                self._robot.get_torso_contact()
+                self._robot.get_torso_contact() or
+                self._env.arena.out_of_range(x, y)
         ):
             return True
         return False

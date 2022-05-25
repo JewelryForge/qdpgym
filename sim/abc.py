@@ -106,6 +106,9 @@ class Quadruped(QuadrupedHandle, metaclass=abc.ABCMeta):
     def noisy(self) -> QuadrupedHandle:
         return self
 
+    def set_init_pose(self, x=0., y=0., yaw=0.):
+        raise NotImplementedError
+
     def set_random_dynamics(self, flag: bool = True):
         raise NotImplementedError
 
@@ -270,6 +273,15 @@ class Hook(metaclass=abc.ABCMeta):
 
 
 class Task(metaclass=abc.ABCMeta):
+    """
+    The task prototype.
+    A task is embedded in an environment, whose methods are
+    automatically called in different periods of an episode;
+    It should also manage hook callbacks.
+    Only `before_step` should have return values, which
+    should turn action into desired joint angles.
+    """
+
     def initialize_episode(self):
         pass
 
@@ -295,6 +307,9 @@ class Task(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def add_hook(self, hook: Hook, name=None):
+        raise NotImplementedError
+
+    def remove_hook(self, name=None):
         raise NotImplementedError
 
     def get_observation(self):

@@ -1,6 +1,8 @@
 import collections
 from typing import Optional, Callable, List, Any
 
+import numpy as np
+
 from .abc import Task, Hook, Quadruped, Environment
 
 
@@ -10,9 +12,9 @@ class NullTask(Task):
     def __init__(self):
         self._robot: Optional[Quadruped] = None
         self._env: Optional[Environment] = None
-        self._random = None
+        self._random: Optional[np.random.RandomState] = None
         self._hooks: List[Hook] = []
-        self._hook_names = set()
+        self._hook_names = {}
         self._options = []
 
     def register_env(self, robot, env, random_state):
@@ -29,8 +31,16 @@ class NullTask(Task):
             raise ValueError(f'Duplicated Hook `{name}`')
         hook.register_task(self)
         self._hooks.append(hook)
-        self._hook_names.add(name)
+        self._hook_names[name] = hook
         return self
+
+    def remove_hook(self, name=None):
+        if name not in self._hook_names:
+            raise RuntimeError(f'Hook `{name}` not found')
+        obj = self._hook_names[name]
+        for i, hook in enumerate(self._hooks):
+            if hook is obj:
+                self._hooks.pop(i)
 
     def get_observation(self):
         return None

@@ -160,7 +160,8 @@ class Aliengo(Quadruped):
         self._cmd_history: Deque[Command] = collections.deque(maxlen=100)
         self._locom: Optional[Aliengo.LocomotionInfo] = None
 
-        self._init_pose = ((0., 0., self.STANCE_HEIGHT), (0., 0., 0., 1.))
+        self._init_yaw = 0.
+        self._init_pose = np.array((0., 0., self.STANCE_HEIGHT)), np.array((0., 0., 0., 1.))
         self._random_dynamics = False
         self._latency_range = None
 
@@ -180,18 +181,27 @@ class Aliengo(Quadruped):
     def cmd_history(self):
         return ut.PadWrapper(self._cmd_history)
 
-    def add_to(self, arena: Terrain, xy=None, yaw: float = None):
-        if xy is None:
-            xy = (0., 0.)
+    def set_init_pose(self, x=0., y=0., yaw=0.):
+        """
+        Set init pose before adding to an arena.
+        The pose may be modified by `add_to` to fit a terrain.
+        """
+
+        self._init_pose[0][0] = x
+        self._init_pose[0][1] = y
+        self._init_yaw = yaw
+
+    def add_to(self, arena: Terrain):
         foot_xy = (np.array(self.STANCE_FOOT_POSITIONS) + np.array(self.HIP_OFFSETS))[:, :2]
-        if yaw is not None:
-            cy, sy = np.cos(yaw), np.sin(yaw)
+        if self._init_yaw != 0.:
+            cy, sy = np.cos(self._init_yaw), np.sin(self._init_yaw)
             trans = np.array(((cy, -sy),
                               (sy, cy)))
             foot_xy = np.array([trans @ f_xy for f_xy in foot_xy])
         else:
             cy, sy = 1., 0.
-        foot_xy += xy
+        x, y, _ = self._init_pose[0]
+        foot_xy += (x, y)
 
         terrain_points = []
         est_height = 0.
@@ -208,7 +218,7 @@ class Aliengo(Quadruped):
         orn = tf.Quaternion.inverse(
             tf.Quaternion.from_rotation(np.array((trn_X, trn_Y, trn_Z)))
         )
-        self._init_pose = (*xy, init_height), orn
+        self._init_pose = np.array((x, y, init_height)), orn
 
     def spawn(self, sim_env, random_state: np.random.RandomState, cfg=None):
         self._sim_env = sim_env

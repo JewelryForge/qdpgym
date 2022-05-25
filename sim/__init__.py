@@ -25,7 +25,10 @@ def is_mujoco_available():
 
 if qdpgym.sim_engine == qdpgym.Sim.MUJOCO:
     assert is_mujoco_available(), 'dm_control is not installed'
-    raise NotImplementedError
+    from .mjc.quadruped import Aliengo
+    from .mjc.env import QuadrupedEnv
+    from .mjc.terrain import *
+    from .mjc.hooks import *
 else:
     assert is_bullet_available(), 'pybullet is not installed'
     from .blt.quadruped import Aliengo

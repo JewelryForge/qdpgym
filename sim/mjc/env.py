@@ -6,12 +6,12 @@ from dm_control import mjcf
 from dm_control.composer import Arena
 
 from qdpgym.sim.abc import Task, Environment, ARRAY_LIKE, TimeStep, StepType
-from qdpgym.sim.mjc.quadruped import AliengoMj
+from .quadruped import Aliengo
 from qdpgym.utils import PadWrapper
 
 
-class QuadrupedEnvMj(Environment):
-    def __init__(self, robot: AliengoMj, arena: Arena, task: Task,
+class QuadrupedEnv(Environment):
+    def __init__(self, robot: Aliengo, arena: Arena, task: Task,
                  timestep=2e-3, time_limit: float = None,
                  num_substeps=10, seed=None):
         self._robot = robot
@@ -114,7 +114,7 @@ class QuadrupedEnvMj(Environment):
         if self._task.is_failed():
             status = StepType.FAIL
             self._task.on_fail()
-        elif ((self._time_limit is not None and self.sim_time > self._time_limit)
+        elif ((self._time_limit is not None and self.sim_time >= self._time_limit)
               or self._task.is_succeeded()):
             status = StepType.SUCCESS
             self._task.on_success()

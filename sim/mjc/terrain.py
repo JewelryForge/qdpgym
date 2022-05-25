@@ -55,7 +55,7 @@ class TexturedTerrainBase(Arena):
         return abs(x) > self._x_size / 2 - 1 or abs(y) > self._y_size / 2 - 1
 
 
-class PlainMj(TexturedTerrainBase):
+class Plain(TexturedTerrainBase):
     def _build(self, size, name='groundplane'):
         super()._build(name=name, size=size)
 
@@ -72,7 +72,7 @@ class PlainMj(TexturedTerrainBase):
         return np.array((0., 0., 1.))
 
 
-class HillsMj(TexturedTerrainBase):
+class Hills(TexturedTerrainBase):
     def _build(self, size, resol: float,
                *rough_dsp: Tuple[NUMERIC, NUMERIC],
                name='hills'):
