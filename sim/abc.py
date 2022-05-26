@@ -4,6 +4,7 @@ import enum
 from typing import Union, Any
 
 import numpy as np
+import torch
 from numpy.random import RandomState
 
 ARRAY_LIKE = Union[np.ndarray, list, tuple]
@@ -152,6 +153,28 @@ class TimeStep:
     reward: Any = 0.
     reward_info: Any = None
     info: Any = None
+
+    def __iter__(self):
+        info = {} if self.info is None else self.info.copy()
+        info['reward_info'] = self.reward_info
+
+        succeeded = self.status == StepType.SUCCESS
+        failed = self.status == StepType.FAIL
+
+        if isinstance(self.status, StepType):
+            done = failed or succeeded
+        elif isinstance(self.status, torch.Tensor):
+            done = torch.logical_or(failed, succeeded)
+        else:  # List[StepType] / Tuple[StepType] / np.ndarray
+            done = np.logical_or(failed, succeeded)
+        info['succeeded'] = succeeded
+
+        return iter((
+            self.observation,
+            self.reward,
+            done,
+            info
+        ))
 
 
 @dataclasses.dataclass

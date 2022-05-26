@@ -114,6 +114,10 @@ class LocomotionV0(BasicTask):
             tg_base_freq
         )) - self._bias) * self._weights
 
+    def is_succeeded(self):
+        x, y, _ = self._robot.get_base_pos()
+        return self._env.arena.out_of_range(x, y)
+
     def is_failed(self):
         r = self._robot.get_base_rpy()[0]
         x, y, _ = self._robot.get_base_pos()
@@ -122,8 +126,7 @@ class LocomotionV0(BasicTask):
                 rel_h < self._robot.STANCE_HEIGHT * 0.5 or
                 rel_h > self._robot.STANCE_HEIGHT * 1.5 or
                 r < -np.pi / 3 or r > np.pi / 3 or
-                self._robot.get_torso_contact() or
-                self._env.arena.out_of_range(x, y)
+                self._robot.get_torso_contact()
         ):
             return True
         return False

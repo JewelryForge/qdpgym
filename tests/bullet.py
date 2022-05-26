@@ -164,8 +164,9 @@ class BulletTestCase(unittest.TestCase):
         env = ParallelWrapper(make_env, 4)
         env.init_episode()
         for _ in range(10):
-            obs = env.step(torch.zeros(4, 12))
-            print(obs)
+            step = env.step(torch.zeros(4, 12))
+            obs, rew, done, info = step
+            print(rew, done, info)
 
     def test_reward_reshape(self):
         x = np.arange(-2, 2, 0.01)

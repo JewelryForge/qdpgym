@@ -221,7 +221,7 @@ class Aliengo(Quadruped):
             self._motor = PdMotorSim(self._freq, 150, 4)
         elif motor == 'actuator_net':
             self._motor = ActuatorNetWithHistorySim(self._freq)
-            self._motor.load_params(os.path.join(rsc_dir, 'actuator_net_with_history.pt'))
+            self._motor.load_params(os.path.join(rsc_dir, 'acnet_220526.pt'))
         else:
             raise NotImplementedError
         self._noisy_on = noisy

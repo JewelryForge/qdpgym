@@ -53,6 +53,7 @@ class LocomotionApp(sim.Application):
             task.add_hook(sim.ExtraViewerHook())
             task.add_hook(sim.RandomTerrainHook())
             task.add_hook(sim.RandomPerturbHook())
+            # task.add_hook(sim.StatisticsHook())
             # task.add_hook(hooks.VideoRecorderBtHook())
         else:
             raise NotImplementedError

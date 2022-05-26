@@ -106,7 +106,7 @@ if __name__ == '__main__':
     parser.add_argument('-l', '--lr', type=float, help='learning rate', default=1e-4)
     parser.add_argument('-e', '--epoch', type=int, help='num epochs', default=2000)
     parser.add_argument('--cuda', action='store_true', help='use cuda for training')
-    parser.add_argument('--train', action='store_true', help='if train')
+    parser.add_argument('--train', action='store_true', help='if train else test')
     args = parser.parse_args()
 
     RSC_DIR = args.rsc
@@ -137,7 +137,7 @@ if __name__ == '__main__':
         )
         get_statistics(actuator_net, HISTORY_INTERVAL)
     else:
-        model_path = '/home/jewel/Workspaces/QuadrupedRLv2/qdpgym/sim/resources/actuator_net_with_history.pt'
+        model_path = '/home/jewel/Workspaces/QuadrupedRLv2/qdpgym/sim/resources/acnet_220526.pt'
         model_info = torch.load(model_path, map_location=device)
         actuator_net = ActuatorNetClass(hidden_dims=model_info['hidden_dims']).to(device)
         actuator_net.load_state_dict(model_info['model'])

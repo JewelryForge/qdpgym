@@ -114,8 +114,8 @@ class ActuatorNetWithHistorySim(ActuatorNetSim):
 
     def calc_torque(self):
         return self._net.calc_torque(self._residue,
-                                     get_padded(self._residue_history, -6),
-                                     get_padded(self._residue_history, -11),
+                                     get_padded(self._residue_history, -4),
+                                     get_padded(self._residue_history, -7),
                                      self._vel,
-                                     get_padded(self._obs_history, -6)[1],
-                                     get_padded(self._obs_history, -11)[1])
+                                     get_padded(self._obs_history, -4)[1],
+                                     get_padded(self._obs_history, -7)[1])

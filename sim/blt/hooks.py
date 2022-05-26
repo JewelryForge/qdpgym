@@ -1,7 +1,9 @@
 import collections
 import copy
+import json
 import math
 import os
+import socket
 import time
 
 import numpy as np
@@ -238,3 +240,85 @@ class VideoRecorderHook(Hook):
         if self._log_id != -1:
             env.client.stopStateLogging(self._log_id)
             self._log_id = -1
+
+
+class _UdpPublisher(object):
+    """
+    Send data stream of locomotion to outer tools such as PlotJuggler.
+    """
+
+    def __init__(self, port):
+        self.client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.port = port
+
+    def send(self, data: dict):
+        msg = json.dumps(data)
+        ip_port = ('127.0.0.1', self.port)
+        self.client.sendto(msg.encode('utf-8'), ip_port)
+
+
+class StatisticsHook(Hook):
+    def __init__(self, publish_on=True):
+        self._torque_sum = 0.
+        self._torque_abs_sum = 0.
+        self._torque_pen_sum = 0.0
+        self._joint_motion_sum = 0.0
+        self._step_counter = 0
+        self._publish = publish_on
+        if self._publish:
+            self._udp_pub = _UdpPublisher(9870)
+        self._task = None
+
+    def register_task(self, task):
+        self._task = task
+
+    def after_step(self, robot, env, random_state):
+
+        def wrap(reward_type):
+            return getattr(self._task.ALL_REWARDS, reward_type)()(robot, env, self._task)
+
+        _, reward_details = self._task.get_reward(detailed=True)
+        self._step_counter += 1
+        self._torque_sum += robot.get_last_torque() ** 2
+        self._torque_abs_sum += abs(robot.get_last_torque())
+        self._torque_pen_sum += wrap('TorquePenalty')
+        self._joint_motion_sum += wrap('JointMotionPenalty')
+
+        # def publish(self, task, rob, env):
+
+    #     data = {
+    #         'obs': env.makeNoisyProprioInfo().standard().tolist(),
+    #         'action': env._action.tolist(),
+    #         'joint_states': {
+    #             'joint_pos': rob.getJointPositions().tolist(),
+    #             'violence': env.getActionViolence().tolist(),
+    #             'commands': rob.getLastCommand().tolist(),
+    #             'joint_vel': rob.getJointVelocities().tolist(),
+    #             'joint_acc': rob.getJointAccelerations().tolist(),
+    #             # 'kp_part': tuple(rob._motor._kp_part),
+    #             # 'kd_part': tuple(rob._motor._kd_part),
+    #             'torque': rob.getLastAppliedTorques().tolist(),
+    #             'contact': rob.getContactStates().tolist()
+    #         },
+    #         'body_height': env.getTerrainBasedHeightOfRobot(),
+    #         # 'cot': rob.getCostOfTransport(),
+    #         'twist': {
+    #             'linear': rob.getBaseLinearVelocityInBaseFrame().tolist(),
+    #             'angular': rob.getBaseAngularVelocityInBaseFrame().tolist(),
+    #         },
+    #         # 'torque_pen': wrap(TorquePenalty)
+    #     }
+    #     self._udp_pub.send(data)
+
+    def init_episode(self, robot, env, random_state):
+        if self._step_counter != 0.:
+            print('episode len:', self._step_counter)
+            print('mse torque', np.sqrt(self._torque_sum / self._step_counter))
+            print('abs torque', self._torque_abs_sum / self._step_counter)
+            print('torque pen', self._torque_pen_sum / self._step_counter)
+            print('joint motion pen', self._joint_motion_sum / self._step_counter)
+            self._torque_sum = 0.
+            self._torque_abs_sum = 0.
+            self._torque_pen_sum = 0.0
+            self._joint_motion_sum = 0.0
+            self._step_counter = 0
