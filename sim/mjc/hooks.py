@@ -11,10 +11,10 @@ class ViewerMjHook(Hook):
     def __init__(self):
         self._viewer: Optional[ViewerMj] = None
 
-    def init_episode(self, robot, env, random_state):
+    def init_episode(self, robot, env):
         self._viewer = ViewerMj(env.physics.model.ptr, env.physics.data.ptr)
 
-    def after_substep(self, robot, env, random_state):
+    def after_substep(self, robot, env):
         perturb = env.get_perturbation()
         if perturb is not None:
             force = perturb[:3]

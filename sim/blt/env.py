@@ -1,20 +1,28 @@
 import collections
+from typing import Union, Any, Optional, Tuple
 
+import gym
 import numpy as np
 import pybullet as pyb
 import pybullet_data as pyb_data
 from pybullet_utils.bullet_client import BulletClient
 
-from qdpgym.sim.abc import Task, Environment, ARRAY_LIKE, TimeStep, StepType
+from qdpgym.sim.abc import Task, Environment, ARRAY_LIKE
 from qdpgym.sim.blt.quadruped import Aliengo
 from qdpgym.sim.blt.terrain import TerrainBase
 from qdpgym.utils import PadWrapper, tf
 
 
 class QuadrupedEnv(Environment):
-    def __init__(self, robot: Aliengo, arena: TerrainBase, task: Task,
-                 timestep: float = 2e-3, time_limit: float = 20,
-                 num_substeps=10, seed=None):
+    def __init__(
+            self,
+            robot: Aliengo,
+            arena: TerrainBase,
+            task: Task,
+            timestep: float = 2e-3,
+            time_limit: float = 20,
+            num_substeps=10
+    ):
         self._robot = robot
         self._arena = arena
         self._task = task
@@ -25,12 +33,11 @@ class QuadrupedEnv(Environment):
         self._render = False
 
         self._init = False
-        self._num_sim_steps = 0
-        self._random = np.random.RandomState(seed)
+        self._elapsed_sim_steps = None
 
         self._sim_env = None if True else pyb
         self._reset_times, self._debug_reset_param = 0, -1
-        self._task.register_env(self._robot, self, self._random)
+        self._task.register_env(self._robot, self)
         self._action_history = collections.deque(maxlen=10)
         self._perturbation = None
 
@@ -38,12 +45,35 @@ class QuadrupedEnv(Environment):
         self._interact_terrain_normal = None
         self._interact_terrain_height = 0.0
 
+    @property
+    def observation_space(self) -> gym.Space:
+        if hasattr(self._task, 'observation_space'):
+            return self._task.observation_space
+        return gym.Space()
+
+    @property
+    def action_space(self):
+        if hasattr(self._task, 'action_space'):
+            return self._task.action_space
+        return gym.Space((12,), float)
+
     def set_render(self, flag=True):
         self._render = flag
 
-    def init_episode(self):
+    def render(self, mode="human"):
+        return super().render(mode)
+
+    def reset(
+            self,
+            seed: Optional[int] = None,
+            return_info: bool = False,
+            options: Optional[dict] = None,
+    ) -> Union[Any, Tuple[Any, dict]]:
+
+        super().reset(seed=seed, return_info=return_info, options=options)
+
         self._init = True
-        self._num_sim_steps = 0
+        self._elapsed_sim_steps = 0
         self._action_history.clear()
 
         if self._sim_env is None:
@@ -57,10 +87,10 @@ class QuadrupedEnv(Environment):
             self._sim_env.setTimeStep(self._timestep)
             self._sim_env.setGravity(0, 0, -9.8)
 
-        self._task.initialize_episode()
+        self._task.init_episode()
         self._arena.spawn(self._sim_env)
         self._robot.add_to(self._arena)
-        self._robot.spawn(self._sim_env, self._random)
+        self._robot.spawn(self._sim_env, self.np_random)
 
         for i in range(50):
             self._robot.update_observation(None, minimal=True)
@@ -68,14 +98,16 @@ class QuadrupedEnv(Environment):
             self._sim_env.stepSimulation()
 
         self._action_history.append(np.array(self._robot.STANCE_CONFIG))
-        self._robot.update_observation(self._random)
-        return TimeStep(
-            StepType.INIT,
-            self._task.get_observation()
+        self._robot.update_observation(self.np_random)
+
+        return (
+            self._task.get_observation() if return_info
+            else (self._task.get_observation(), {})
         )
 
-    def __del__(self):
-        self._sim_env.disconnect()
+    def close(self):
+        if self._sim_env is not None:
+            self._sim_env.disconnect()
 
     @property
     def robot(self):
@@ -104,7 +136,7 @@ class QuadrupedEnv(Environment):
 
     @property
     def sim_time(self):
-        return self._num_sim_steps * self._timestep
+        return self._elapsed_sim_steps * self._timestep
 
     @property
     def timestep(self):
@@ -116,7 +148,7 @@ class QuadrupedEnv(Environment):
 
     def step(self, action: ARRAY_LIKE):
         if self._check_debug_reset_param():
-            return self.init_episode()
+            return self.reset(), 0., True, {}
 
         assert self._init, 'Call `init_episode` before `step`!'
         action = self._task.before_step(action)
@@ -132,30 +164,30 @@ class QuadrupedEnv(Environment):
 
             self._apply_perturbation()
             self._sim_env.stepSimulation()
-            self._num_sim_steps += 1
+            self._elapsed_sim_steps += 1
             self._update_observation()
 
             self._task.after_substep()
         self._task.after_step()
+
+        done = False
+        info = {}
         if self._task.is_failed():
-            status = StepType.FAIL
+            done = True
             self._task.on_fail()
         elif ((self._time_limit is not None and self.sim_time >= self._time_limit)
               or self._task.is_succeeded()):
-            status = StepType.SUCCESS
+            info['TimeLimit.truncated'] = True
             self._task.on_success()
-        else:
-            status = StepType.REGULAR
+
         reward, reward_info = self._task.get_reward(True)
-        return TimeStep(
-            status,
-            self._task.get_observation(),
-            reward,
-            reward_info
+        info['reward_info'] = reward_info
+        return (
+            self._task.get_observation(), reward, done, info
         )
 
     def _update_observation(self):
-        self._robot.update_observation(self._random)
+        self._robot.update_observation(self.np_random)
 
         self._interact_terrain_samples.clear()
         self._interact_terrain_height = 0.

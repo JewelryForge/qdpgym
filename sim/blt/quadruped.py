@@ -220,7 +220,7 @@ class Aliengo(Quadruped):
         )
         self._init_pose = np.array((x, y, init_height)), orn
 
-    def spawn(self, sim_env, random_state: np.random.RandomState, cfg=None):
+    def spawn(self, sim_env, random_state, cfg=None):
         self._sim_env = sim_env
 
         # flags = pyb.URDF_USE_SELF_COLLISION if self._self_collision else 0

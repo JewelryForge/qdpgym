@@ -1,11 +1,9 @@
 import abc
 import dataclasses
-import enum
-from typing import Union, Any
+from typing import Union
 
+import gym
 import numpy as np
-import torch
-from numpy.random import RandomState
 
 ARRAY_LIKE = Union[np.ndarray, list, tuple]
 NUMERIC = Union[int, float]
@@ -139,44 +137,6 @@ class Terrain(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
-class StepType(enum.IntEnum):
-    INIT = 0
-    REGULAR = 1
-    FAIL = 2
-    SUCCESS = 3
-
-
-@dataclasses.dataclass
-class TimeStep:
-    status: Union[StepType, Any]
-    observation: Any
-    reward: Any = 0.
-    reward_info: Any = None
-    info: Any = None
-
-    def __iter__(self):
-        info = {} if self.info is None else self.info.copy()
-        info['reward_info'] = self.reward_info
-
-        succeeded = self.status == StepType.SUCCESS
-        failed = self.status == StepType.FAIL
-
-        if isinstance(self.status, StepType):
-            done = failed or succeeded
-        elif isinstance(self.status, torch.Tensor):
-            done = torch.logical_or(failed, succeeded)
-        else:  # List[StepType] / Tuple[StepType] / np.ndarray
-            done = np.logical_or(failed, succeeded)
-        info['succeeded'] = succeeded
-
-        return iter((
-            self.observation,
-            self.reward,
-            done,
-            info
-        ))
-
-
 @dataclasses.dataclass
 class Snapshot(object):
     position: np.ndarray = None
@@ -209,7 +169,7 @@ class ComposedObs(tuple):
     pass
 
 
-class Environment(metaclass=abc.ABCMeta):
+class Environment(gym.Env, metaclass=abc.ABCMeta):
     @property
     def robot(self) -> QuadrupedHandle:
         raise NotImplementedError
@@ -238,12 +198,6 @@ class Environment(metaclass=abc.ABCMeta):
     def timestep(self):
         raise NotImplementedError
 
-    def init_episode(self, *args, **kwargs) -> TimeStep:
-        raise NotImplementedError
-
-    def step(self, action) -> TimeStep:
-        raise NotImplementedError
-
     def get_action_rate(self) -> np.ndarray:
         raise NotImplementedError
 
@@ -270,28 +224,28 @@ class Hook(metaclass=abc.ABCMeta):
     def register_task(self, task):
         pass
 
-    def initialize(self, robot, env, random_state: RandomState):
+    def initialize(self, robot, env):
         pass
 
-    def init_episode(self, robot, env, random_state: RandomState):
+    def init_episode(self, robot, env):
         pass
 
-    def before_step(self, robot, env, random_state: RandomState):
+    def before_step(self, robot, env):
         pass
 
-    def before_substep(self, robot, env, random_state: RandomState):
+    def before_substep(self, robot, env):
         pass
 
-    def after_step(self, robot, env, random_state: RandomState):
+    def after_step(self, robot, env):
         pass
 
-    def after_substep(self, robot, env, random_state: RandomState):
+    def after_substep(self, robot, env):
         pass
 
-    def on_success(self, robot, env, random_state: RandomState):
+    def on_success(self, robot, env):
         pass
 
-    def on_fail(self, robot, env, random_state: RandomState):
+    def on_fail(self, robot, env):
         pass
 
 
@@ -305,7 +259,10 @@ class Task(metaclass=abc.ABCMeta):
     should turn action into desired joint angles.
     """
 
-    def initialize_episode(self):
+    observation_space: gym.Space
+    action_space: gym.Space
+
+    def init_episode(self):
         pass
 
     def before_step(self, action):
@@ -326,7 +283,7 @@ class Task(metaclass=abc.ABCMeta):
     def on_fail(self):
         pass
 
-    def register_env(self, robot: Quadruped, env: Environment, random_state: RandomState):
+    def register_env(self, robot: Quadruped, env: Environment):
         raise NotImplementedError
 
     def add_hook(self, hook: Hook, name=None):

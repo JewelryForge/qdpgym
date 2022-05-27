@@ -40,7 +40,7 @@ class QuadrupedEnv(Environment):
         self._robot.init_mjcf_model(self._random)
         self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
-        self._task.initialize_episode()
+        self._task.init_episode()
         self._robot.init_physics(self._physics, self._random)
 
         for i in range(50):

@@ -25,10 +25,10 @@ class ViewerHook(Hook):
 
         self._last_frame_time = time.time()
 
-    def initialize(self, robot, env, random_state):
+    def initialize(self, robot, env):
         env.set_render()
 
-    def init_episode(self, robot, env, random_state):
+    def init_episode(self, robot, env):
         self._robot_yaw_buffer.clear()
         if self._pre_vis:
             return
@@ -42,13 +42,13 @@ class ViewerHook(Hook):
         sim_env.configureDebugVisualizer(pyb.COV_ENABLE_DEPTH_BUFFER_PREVIEW, False)
         sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, False)
 
-    def before_step(self, robot, env, random_state):
+    def before_step(self, robot, env):
         if not self._init_vis:
             self._init_vis = True
             env.sim_env.configureDebugVisualizer(pyb.COV_ENABLE_RENDERING, True)
             env.sim_env.configureDebugVisualizer(pyb.COV_ENABLE_GUI, True)
 
-    def after_step(self, robot, env, random_state):
+    def after_step(self, robot, env):
         sim_env = env.sim_env
         period = env.timestep * env.num_substeps
         time_spent = time.time() - self._last_frame_time
@@ -134,8 +134,8 @@ class ExtraViewerHook(ViewerHook):
         self._force_marker = -1
         self._torque_vis = _TorqueVisualizerHelper()
 
-    def after_step(self, robot, env, random_state):
-        super().after_step(robot, env, random_state)
+    def after_step(self, robot, env):
+        super().after_step(robot, env)
         sim_env = env.sim_env
         if self._show_perturb:
             perturb = env.get_perturbation(in_robot_frame=True)
@@ -187,8 +187,8 @@ class RandomTerrainHook(Hook):
             terrain = PlainHf.make(size, resolution)
         return terrain
 
-    def init_episode(self, robot, env, random_state):
-        env.arena = self.generate_terrain(random_state)
+    def init_episode(self, robot, env):
+        env.arena = self.generate_terrain(env.np_random)
 
 
 class RandomPerturbHook(Hook):
@@ -212,10 +212,11 @@ class RandomPerturbHook(Hook):
         external_torque = random_state.uniform(-self.torque_magnitude, self.torque_magnitude)
         return external_force, external_torque
 
-    def before_substep(self, robot, env, random_state):
+    def before_substep(self, robot, env):
         if env.sim_time >= self.last_update + self.interval:
-            env.set_perturbation(np.concatenate(self.get_random_perturb(random_state)))
-            self.interval = random_state.uniform(*self.interval_range)
+            random = env.np_random
+            env.set_perturbation(np.concatenate(self.get_random_perturb(random)))
+            self.interval = random.uniform(*self.interval_range)
             self.last_update = env.sim_time
 
 
@@ -228,7 +229,7 @@ class VideoRecorderHook(Hook):
         self._log_id = -1
         self._status = True
 
-    def before_step(self, robot, env, random_state):
+    def before_step(self, robot, env):
         if self._log_id == -1 and self._status:
             log.info('start recording')
             self._log_id = env.sim_env.startStateLogging(
@@ -236,7 +237,7 @@ class VideoRecorderHook(Hook):
             )
             self._status = False
 
-    def init_episode(self, robot, env, random_state):
+    def init_episode(self, robot, env):
         if self._log_id != -1:
             env.client.stopStateLogging(self._log_id)
             self._log_id = -1
@@ -272,7 +273,7 @@ class StatisticsHook(Hook):
     def register_task(self, task):
         self._task = task
 
-    def after_step(self, robot, env, random_state):
+    def after_step(self, robot, env):
 
         def wrap(reward_type):
             return getattr(self._task.ALL_REWARDS, reward_type)()(robot, env, self._task)
@@ -310,7 +311,7 @@ class StatisticsHook(Hook):
     #     }
     #     self._udp_pub.send(data)
 
-    def init_episode(self, robot, env, random_state):
+    def init_episode(self, robot, env):
         if self._step_counter != 0.:
             print('episode len:', self._step_counter)
             print('mse torque', np.sqrt(self._torque_sum / self._step_counter))

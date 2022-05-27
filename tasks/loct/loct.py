@@ -1,17 +1,21 @@
 import math
 from typing import Optional
 
+import gym.spaces
 import numpy as np
 
+import qdpgym.tasks.loct.reward as all_rewards
 from qdpgym.sim.abc import Quadruped, Environment, QuadrupedHandle, Hook, ComposedObs
 from qdpgym.sim.common.tg import TgStateMachine, vertical_tg
 from qdpgym.sim.task import BasicTask
 from qdpgym.utils import tf
-import qdpgym.tasks.loct.reward as all_rewards
 
 
 class LocomotionV0(BasicTask):
     ALL_REWARDS = all_rewards
+
+    observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(211,))
+    action_space = gym.spaces.Box(low=-1., high=1., shape=(12,))
 
     def __init__(self, substep_reward_on=True):
         super().__init__(substep_reward_on)
@@ -30,17 +34,21 @@ class LocomotionV0(BasicTask):
     def cmd(self, value):
         self._cmd = np.array(value)
 
-    def register_env(self, robot, env, random_state):
-        super().register_env(robot, env, random_state)
+    @property
+    def np_random(self):
+        return self._env.np_random
+
+    def register_env(self, robot, env):
+        super().register_env(robot, env)
         robot.set_latency(0., 0.03)
         robot.set_random_dynamics(True)
         self._traj_gen = TgStateMachine(env.timestep * env.num_substeps,
-                                        random_state, vertical_tg(0.12))
+                                        self.np_random, vertical_tg(0.12))
         self._build_weights_and_bias()
 
-    def initialize_episode(self):
-        self._robot.set_init_pose(yaw=self._random.random() * 2 * np.pi)
-        super().initialize_episode()
+    def init_episode(self):
+        self._robot.set_init_pose(yaw=self._env.np_random.random() * 2 * np.pi)
+        super().init_episode()
 
     def before_step(self, action):
         action = super().before_step(action)
@@ -200,101 +208,101 @@ class LocomotionV0(BasicTask):
         ))
 
 
-class LocomotionV0Raw(LocomotionV0):
-    def get_observation(self):
-        r: Quadruped = self._robot
-        e: Environment = self._env
-        n: QuadrupedHandle = r.noisy
-        if (self._cmd[:2] == 0.).all():
-            cmd_obs = np.concatenate(((0.,), self._cmd))
-        else:
-            cmd_obs = np.concatenate(((1.,), self._cmd))
-
-        n_roll_pitch = n.get_base_rpy()[:2]
-        n_base_linear = n.get_velocimeter()
-        n_base_angular = n.get_gyro()
-        n_joint_pos = n.get_joint_pos()
-        n_joint_vel = n.get_joint_vel()
-
-        r_roll_pitch = r.get_base_rpy()[:2]
-        r_base_linear = r.get_velocimeter()
-        r_base_angular = r.get_gyro()
-        r_joint_pos = r.get_joint_pos()
-        r_joint_vel = r.get_joint_vel()
-
-        action_history = e.action_history
-        joint_target = action_history[-1]
-        joint_target_history = action_history[-2]
-
-        tg_base_freq = (self._traj_gen.base_frequency,)
-        tg_freq = self._traj_gen.frequency
-        tg_raw_phases = self._traj_gen.phases
-        tg_phases = np.concatenate((np.sin(tg_raw_phases), np.cos(tg_raw_phases)))
-
-        n_joint_err = n.get_last_command() - n.get_joint_pos()
-        n_state1, n_state2 = n.get_state_history(0.01), n.get_state_history(0.02)
-        cmd1, cmd2 = n.get_cmd_history(0.01).command, n.get_cmd_history(0.02).command
-        n_joint_proc_err = np.concatenate((cmd1 - n_state1.joint_pos, cmd2 - n_state2.joint_pos))
-        n_joint_proc_vel = np.concatenate((n_state1.joint_vel, n_state2.joint_vel))
-
-        r_joint_err = r.get_last_command() - r.get_joint_pos()
-        r_state1, r_state2 = r.get_state_history(0.01), r.get_state_history(0.02)
-        r_joint_proc_err = np.concatenate((cmd1 - r_state1.joint_pos, cmd2 - r_state2.joint_pos))
-        r_joint_proc_vel = np.concatenate((r_state1.joint_vel, r_state2.joint_vel))
-
-        terrain_info = self._collect_terrain_info()
-        contact_states = r.get_leg_contacts()
-        contact_forces = r.get_force_sensor().reshape(-1)
-        foot_friction_coeffs = np.ones(4)
-
-        perturbation = e.get_perturbation(in_robot_frame=True)
-        if perturbation is None:
-            perturbation = np.zeros(6)
-
-        return ComposedObs((
-            (np.concatenate((
-                terrain_info,
-                contact_states,
-                contact_forces,
-                foot_friction_coeffs,
-                perturbation,
-                cmd_obs,
-                n_roll_pitch,
-                n_base_linear,
-                n_base_angular,
-                n_joint_pos,
-                n_joint_vel,
-                joint_target,
-                tg_phases,
-                tg_freq,
-                n_joint_err,
-                n_joint_proc_err,
-                n_joint_proc_vel,
-                joint_target_history,
-                tg_base_freq
-            )) - self._bias) * self._weights,
-            (np.concatenate((
-                terrain_info,
-                contact_states,
-                contact_forces,
-                foot_friction_coeffs,
-                perturbation,
-                cmd_obs,
-                r_roll_pitch,
-                r_base_linear,
-                r_base_angular,
-                r_joint_pos,
-                r_joint_vel,
-                joint_target,
-                tg_phases,
-                tg_freq,
-                r_joint_err,
-                r_joint_proc_err,
-                r_joint_proc_vel,
-                joint_target_history,
-                tg_base_freq
-            )) - self._bias) * self._weights
-        ))
+# class LocomotionV0Raw(LocomotionV0):
+#     def get_observation(self):
+#         r: Quadruped = self._robot
+#         e: Environment = self._env
+#         n: QuadrupedHandle = r.noisy
+#         if (self._cmd[:2] == 0.).all():
+#             cmd_obs = np.concatenate(((0.,), self._cmd))
+#         else:
+#             cmd_obs = np.concatenate(((1.,), self._cmd))
+#
+#         n_roll_pitch = n.get_base_rpy()[:2]
+#         n_base_linear = n.get_velocimeter()
+#         n_base_angular = n.get_gyro()
+#         n_joint_pos = n.get_joint_pos()
+#         n_joint_vel = n.get_joint_vel()
+#
+#         r_roll_pitch = r.get_base_rpy()[:2]
+#         r_base_linear = r.get_velocimeter()
+#         r_base_angular = r.get_gyro()
+#         r_joint_pos = r.get_joint_pos()
+#         r_joint_vel = r.get_joint_vel()
+#
+#         action_history = e.action_history
+#         joint_target = action_history[-1]
+#         joint_target_history = action_history[-2]
+#
+#         tg_base_freq = (self._traj_gen.base_frequency,)
+#         tg_freq = self._traj_gen.frequency
+#         tg_raw_phases = self._traj_gen.phases
+#         tg_phases = np.concatenate((np.sin(tg_raw_phases), np.cos(tg_raw_phases)))
+#
+#         n_joint_err = n.get_last_command() - n.get_joint_pos()
+#         n_state1, n_state2 = n.get_state_history(0.01), n.get_state_history(0.02)
+#         cmd1, cmd2 = n.get_cmd_history(0.01).command, n.get_cmd_history(0.02).command
+#         n_joint_proc_err = np.concatenate((cmd1 - n_state1.joint_pos, cmd2 - n_state2.joint_pos))
+#         n_joint_proc_vel = np.concatenate((n_state1.joint_vel, n_state2.joint_vel))
+#
+#         r_joint_err = r.get_last_command() - r.get_joint_pos()
+#         r_state1, r_state2 = r.get_state_history(0.01), r.get_state_history(0.02)
+#         r_joint_proc_err = np.concatenate((cmd1 - r_state1.joint_pos, cmd2 - r_state2.joint_pos))
+#         r_joint_proc_vel = np.concatenate((r_state1.joint_vel, r_state2.joint_vel))
+#
+#         terrain_info = self._collect_terrain_info()
+#         contact_states = r.get_leg_contacts()
+#         contact_forces = r.get_force_sensor().reshape(-1)
+#         foot_friction_coeffs = np.ones(4)
+#
+#         perturbation = e.get_perturbation(in_robot_frame=True)
+#         if perturbation is None:
+#             perturbation = np.zeros(6)
+#
+#         return ComposedObs((
+#             (np.concatenate((
+#                 terrain_info,
+#                 contact_states,
+#                 contact_forces,
+#                 foot_friction_coeffs,
+#                 perturbation,
+#                 cmd_obs,
+#                 n_roll_pitch,
+#                 n_base_linear,
+#                 n_base_angular,
+#                 n_joint_pos,
+#                 n_joint_vel,
+#                 joint_target,
+#                 tg_phases,
+#                 tg_freq,
+#                 n_joint_err,
+#                 n_joint_proc_err,
+#                 n_joint_proc_vel,
+#                 joint_target_history,
+#                 tg_base_freq
+#             )) - self._bias) * self._weights,
+#             (np.concatenate((
+#                 terrain_info,
+#                 contact_states,
+#                 contact_forces,
+#                 foot_friction_coeffs,
+#                 perturbation,
+#                 cmd_obs,
+#                 r_roll_pitch,
+#                 r_base_linear,
+#                 r_base_angular,
+#                 r_joint_pos,
+#                 r_joint_vel,
+#                 joint_target,
+#                 tg_phases,
+#                 tg_freq,
+#                 r_joint_err,
+#                 r_joint_proc_err,
+#                 r_joint_proc_vel,
+#                 joint_target_history,
+#                 tg_base_freq
+#             )) - self._bias) * self._weights
+#         ))
 
 
 class RandomCommandSetterHook(Hook):
@@ -320,12 +328,14 @@ class RandomCommandSetterHook(Hook):
             yaw = random_state.uniform(0, math.tau)
             return np.array((math.cos(yaw), math.sin(yaw), angular_cmd))
 
-    def init_episode(self, robot, env, random_state):
-        self._task.cmd = self.get_random_cmd(random_state)
-        self._interval = random_state.uniform(*self._interval_range)
+    def init_episode(self, robot, env):
+        random = env.np_random
+        self._task.cmd = self.get_random_cmd(random)
+        self._interval = random.uniform(*self._interval_range)
 
-    def after_step(self, robot, env, random_state):
+    def after_step(self, robot, env):
         if env.sim_time >= self._last_update + self._interval:
-            self._task.cmd = self.get_random_cmd(random_state)
+            random = env.np_random
+            self._task.cmd = self.get_random_cmd(random)
             self._last_update = env.sim_time
-            self._interval = random_state.uniform(*self._interval_range)
+            self._interval = random.uniform(*self._interval_range)

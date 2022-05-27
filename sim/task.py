@@ -12,17 +12,15 @@ class NullTask(Task):
     def __init__(self):
         self._robot: Optional[Quadruped] = None
         self._env: Optional[Environment] = None
-        self._random: Optional[np.random.RandomState] = None
         self._hooks: List[Hook] = []
         self._hook_names = {}
         self._options = []
 
-    def register_env(self, robot, env, random_state):
+    def register_env(self, robot, env):
         self._robot = robot
         self._env = env
-        self._random = random_state
         for hook in self._hooks:
-            hook.initialize(self._robot, self._env, random_state)
+            hook.initialize(self._robot, self._env)
 
     def add_hook(self, hook: Hook, name=None):
         if name is None:
@@ -57,34 +55,34 @@ class NullTask(Task):
     def is_failed(self):
         return False
 
-    def initialize_episode(self):
+    def init_episode(self):
         for hook in self._hooks:
-            hook.init_episode(self._robot, self._env, self._random)
+            hook.init_episode(self._robot, self._env)
 
     def before_step(self, action):
         for hook in self._hooks:
-            hook.before_step(self._robot, self._env, self._random)
+            hook.before_step(self._robot, self._env)
         return action
 
     def before_substep(self):
         for hook in self._hooks:
-            hook.before_substep(self._robot, self._env, self._random)
+            hook.before_substep(self._robot, self._env)
 
     def after_step(self):
         for hook in self._hooks:
-            hook.after_step(self._robot, self._env, self._random)
+            hook.after_step(self._robot, self._env)
 
     def after_substep(self):
         for hook in self._hooks:
-            hook.after_substep(self._robot, self._env, self._random)
+            hook.after_substep(self._robot, self._env)
 
     def on_success(self):
         for hook in self._hooks:
-            hook.on_success(self._robot, self._env, self._random)
+            hook.on_success(self._robot, self._env)
 
     def on_fail(self):
         for hook in self._hooks:
-            hook.on_fail(self._robot, self._env, self._random)
+            hook.on_fail(self._robot, self._env)
 
 
 class RewardRegistry(object):
@@ -161,8 +159,8 @@ class BasicTask(NullTask):
     def set_reward_coeff(self, value):
         self._reward_registry.set_coeff(value)
 
-    def register_env(self, robot, env, random_state):
-        super().register_env(robot, env, random_state)
+    def register_env(self, robot, env):
+        super().register_env(robot, env)
         self._reward_registry.register_task(robot, env, self)
 
     def before_step(self, action):
