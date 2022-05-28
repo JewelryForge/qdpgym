@@ -1,4 +1,6 @@
 import math
+import sys
+import time
 from typing import Optional
 
 import gym.spaces
@@ -8,7 +10,7 @@ import qdpgym.tasks.loct.reward as all_rewards
 from qdpgym.sim.abc import Quadruped, Environment, QuadrupedHandle, Hook, ComposedObs
 from qdpgym.sim.common.tg import TgStateMachine, vertical_tg
 from qdpgym.sim.task import BasicTask
-from qdpgym.utils import tf
+from qdpgym.utils import tf, log
 
 
 class LocomotionV0(BasicTask):
@@ -208,6 +210,92 @@ class LocomotionV0(BasicTask):
         ))
 
 
+class LocomotionSimple(LocomotionV0):
+    observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(133,))
+
+    def get_observation(self):
+        r: Quadruped = self._robot
+        e: Environment = self._env
+        n: QuadrupedHandle = r.noisy
+        if (self._cmd[:2] == 0.).all():
+            cmd_obs = np.concatenate(((0.,), self._cmd))
+        else:
+            cmd_obs = np.concatenate(((1.,), self._cmd))
+
+        roll_pitch = n.get_base_rpy()[:2]
+        base_linear = n.get_velocimeter()
+        base_angular = n.get_gyro()
+        joint_pos = n.get_joint_pos()
+        joint_vel = n.get_joint_vel()
+
+        action_history = e.action_history
+        joint_target = action_history[-1]
+        joint_target_history = action_history[-2]
+
+        tg_base_freq = (self._traj_gen.base_frequency,)
+        tg_freq = self._traj_gen.frequency
+        tg_raw_phases = self._traj_gen.phases
+        tg_phases = np.concatenate((np.sin(tg_raw_phases), np.cos(tg_raw_phases)))
+
+        joint_err = n.get_last_command() - n.get_joint_pos()
+        state1, state2 = n.get_state_history(0.01), n.get_state_history(0.02)
+        cmd1, cmd2 = n.get_cmd_history(0.01).command, n.get_cmd_history(0.02).command
+        joint_proc_err = np.concatenate((cmd1 - state1.joint_pos, cmd2 - state2.joint_pos))
+        joint_proc_vel = np.concatenate((state1.joint_vel, state2.joint_vel))
+
+        return (np.concatenate((
+            cmd_obs,
+            roll_pitch,
+            base_linear,
+            base_angular,
+            joint_pos,
+            joint_vel,
+            joint_target,
+            tg_phases,
+            tg_freq,
+            joint_err,
+            joint_proc_err,
+            joint_proc_vel,
+            joint_target_history,
+            tg_base_freq
+        )) - self._bias) * self._weights
+
+    def _build_weights_and_bias(self):
+        self._weights = np.concatenate((
+            (1.,) * 4,  # command
+            (2., 2.),  # roll pitch
+            (2.,) * 3,  # linear
+            (2.,) * 3,  # angular
+            (2.,) * 12,  # joint pos
+            (0.5, 0.4, 0.3) * 4,  # joint vel
+            (2.,) * 12,  # joint target
+            (1.,) * 8,  # tg phases
+            (100.,) * 4,  # tg freq
+            (6.5, 4.5, 3.5) * 4,  # joint error
+            (5.,) * 24,  # proc joint error
+            (0.5, 0.4, 0.3) * 8,  # proc joint vel
+            (2.,) * 12,  # joint target history
+            (1,)  # tg base freq
+        ))
+        stance_cfg = self._robot.STANCE_CONFIG
+        self._bias = np.concatenate((
+            (0.,) * 4,  # command
+            (0., 0.),  # roll pitch
+            (0.,) * 3,  # linear
+            (0.,) * 3,  # angular
+            stance_cfg,  # joint pos
+            (0.,) * 12,  # joint vel
+            stance_cfg,  # joint target
+            (0.,) * 8,  # tg phases
+            (self._traj_gen.base_frequency,) * 4,  # tg freq
+            (0.,) * 12,  # joint error
+            (0.,) * 24,  # joint proc error
+            (0.,) * 24,  # joint proc vel
+            stance_cfg,  # joint target history
+            (self._traj_gen.base_frequency,)  # tg base freq
+        ))
+
+
 # class LocomotionV0Raw(LocomotionV0):
 #     def get_observation(self):
 #         r: Quadruped = self._robot
@@ -339,3 +427,42 @@ class RandomCommandSetterHook(Hook):
             self._task.cmd = self.get_random_cmd(random)
             self._last_update = env.sim_time
             self._interval = random.uniform(*self._interval_range)
+
+
+class GamepadCommanderHook(Hook):
+    def __init__(self, gamepad_type='Xbox'):
+        from qdpgym.thirdparty.gamepad import gamepad, controllers
+        if not gamepad.available():
+            log.warn('Please connect your gamepad...')
+            while not gamepad.available():
+                time.sleep(1.0)
+        try:
+            self.gamepad: gamepad.Gamepad = getattr(controllers, gamepad_type)()
+            self.gamepad_type = gamepad_type
+        except AttributeError:
+            raise RuntimeError(f'`{gamepad_type}` is not supported,'
+                               f'all {controllers.all_controllers}')
+        self.gamepad.startBackgroundUpdates()
+        log.info('Gamepad connected')
+
+        self._task: Optional[LocomotionV0] = None
+
+    @classmethod
+    def is_available(cls):
+        from qdpgym.thirdparty.gamepad import gamepad
+        return gamepad.available()
+
+    def register_task(self, task):
+        self._task = task
+
+    def before_step(self, robot, env):
+        if self.gamepad.isConnected():
+            x_speed = -self.gamepad.axis('LAS -Y')
+            y_speed = -self.gamepad.axis('LAS -X')
+            steering = -self.gamepad.axis('RAS -X')
+            self._task.cmd = (x_speed, y_speed, steering)
+        else:
+            sys.exit(1)
+
+    def __del__(self):
+        self.gamepad.disconnect()

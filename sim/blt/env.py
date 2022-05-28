@@ -101,8 +101,8 @@ class QuadrupedEnv(Environment):
         self._robot.update_observation(self.np_random)
 
         return (
-            self._task.get_observation() if return_info
-            else (self._task.get_observation(), {})
+            self._task.get_observation()
+            # if return_info else (self._task.get_observation(), {})
         )
 
     def close(self):
@@ -177,6 +177,7 @@ class QuadrupedEnv(Environment):
             self._task.on_fail()
         elif ((self._time_limit is not None and self.sim_time >= self._time_limit)
               or self._task.is_succeeded()):
+            done = True
             info['TimeLimit.truncated'] = True
             self._task.on_success()
 

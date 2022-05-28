@@ -10,7 +10,8 @@ import numpy as np
 import yaml
 
 __all__ = ['make_part', 'Angle', 'replace_is', 'replace_eq', 'colored_str', 'log',
-           'MfTimer', 'get_padded', 'PadWrapper', 'get_timestamp', 'YamlLoader']
+           'MfTimer', 'get_padded', 'PadWrapper', 'get_timestamp', 'YamlLoader',
+           'print_return']
 
 
 class make_part(functools.partial):
@@ -325,3 +326,12 @@ class YamlLoader(_NamespaceWrapper):
     @property
     def kwargs(self):
         return {}
+
+
+def print_return(func):
+    def wrapper(*args, **kwargs):
+        ret = func(*args, **kwargs)
+        print(ret)
+        return ret
+
+    return wrapper

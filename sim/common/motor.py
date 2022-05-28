@@ -4,7 +4,7 @@ from typing import Iterable
 import numpy as np
 import torch
 
-from qdpgym.sim.common.identify import ActuatorNet, ActuatorNetWithHistory
+from qdpgym.sim.common.identify import ActuatorNet
 from qdpgym.utils import get_padded, replace_is
 
 
@@ -89,33 +89,21 @@ class PdMotorSim(MotorSim):
 
 
 class ActuatorNetSim(MotorSim):
-    NetClass = ActuatorNet
-
     def __init__(self, frequency, net=None):
         super().__init__(frequency)
         self._net = net
 
     def load_params(self, model_path, device='cpu'):
         model_info = torch.load(model_path, map_location=device)
-        self._net = self.NetClass(hidden_dims=model_info['hidden_dims']).to(device)
+        self._net = ActuatorNet(hidden_dims=model_info['hidden_dims']).to(device)
         self._net.load_state_dict(model_info['model'])
 
     def calc_torque(self):
-        last_residue = self._residue_history[-2] if len(self._residue_history) > 1 else self._residue
-        residue_rate = (self._residue - last_residue) * self._freq
-        return self._net.calc_torque(self._residue, residue_rate, self._vel)
-
-
-class ActuatorNetWithHistorySim(ActuatorNetSim):
-    NetClass = ActuatorNetWithHistory
-
-    def __init__(self, frequency, net=None):
-        super().__init__(frequency, net)
-
-    def calc_torque(self):
-        return self._net.calc_torque(self._residue,
-                                     get_padded(self._residue_history, -4),
-                                     get_padded(self._residue_history, -7),
-                                     self._vel,
-                                     get_padded(self._obs_history, -4)[1],
-                                     get_padded(self._obs_history, -7)[1])
+        return self._net.calc_torque(
+            self._residue,
+            get_padded(self._residue_history, -4),
+            get_padded(self._residue_history, -7),
+            self._vel,
+            get_padded(self._obs_history, -4)[1],
+            get_padded(self._obs_history, -7)[1]
+        )

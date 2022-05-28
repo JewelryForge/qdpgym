@@ -13,7 +13,7 @@ from qdpgym.sim import rsc_dir
 from qdpgym.sim.abc import ARRAY_LIKE, Terrain, Quadruped, QuadrupedHandle
 from qdpgym.sim.abc import Snapshot, Command
 from qdpgym.sim.blt.utils import DynamicsInfo
-from qdpgym.sim.common.motor import PdMotorSim, ActuatorNetWithHistorySim
+from qdpgym.sim.common.motor import PdMotorSim, ActuatorNetSim
 from qdpgym.sim.common.noisyhandle import NoisyHandle
 
 
@@ -136,8 +136,8 @@ class Aliengo(Quadruped):
         if motor == 'pd':
             self._motor = PdMotorSim(self._freq, 150, 4)
         elif motor == 'actuator_net':
-            self._motor = ActuatorNetWithHistorySim(self._freq)
-            self._motor.load_params(os.path.join(rsc_dir, 'actuator_net_with_history.pt'))
+            self._motor = ActuatorNetSim(self._freq)
+            self._motor.load_params(os.path.join(rsc_dir, 'acnet_220526.pt'))
         else:
             raise NotImplementedError
         self._motor.set_joint_limits(*zip(*self.JOINT_LIMITS))

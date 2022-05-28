@@ -8,7 +8,7 @@ import wandb
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, random_split, ConcatDataset
 
-from qdpgym.sim.common.identify import ActuatorNetWithHistory
+from qdpgym.sim.common.identify import ActuatorNet
 from qdpgym.utils import get_timestamp, log
 
 
@@ -122,10 +122,9 @@ if __name__ == '__main__':
 
     np.set_printoptions(3, linewidth=10000, suppress=True)
     DatasetClass = RobotDatasetWithHistory
-    ActuatorNetClass = ActuatorNetWithHistory
     device = torch.device(DEVICE)
     if TRAIN:
-        actuator_net = ActuatorNetClass(hidden_dims=(32, 32, 32))
+        actuator_net = ActuatorNet(hidden_dims=(32, 32, 32))
         train_actuator_net(
             actuator_net,
             DatasetClass,
@@ -139,7 +138,7 @@ if __name__ == '__main__':
     else:
         model_path = '/home/jewel/Workspaces/QuadrupedRLv2/qdpgym/sim/resources/acnet_220526.pt'
         model_info = torch.load(model_path, map_location=device)
-        actuator_net = ActuatorNetClass(hidden_dims=model_info['hidden_dims']).to(device)
+        actuator_net = ActuatorNet(hidden_dims=model_info['hidden_dims']).to(device)
         actuator_net.load_state_dict(model_info['model'])
         get_statistics(actuator_net, HISTORY_INTERVAL)
 
