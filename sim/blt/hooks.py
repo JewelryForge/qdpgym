@@ -106,22 +106,25 @@ class _TorqueVisualizerHelper(object):
     def __init__(self):
         self._axis_x = None
         self._axis_y = None
-        self._marker_start = None
-        self._marker_phase = 0
+        self._mk_start = None
+        self._mk_phase = 0
 
     def update(self, torque):
         if (torque != 0.).any():
             self._axis_x, self._axis_y, _ = tf.Rotation.from_zaxis(tf.vunit(torque)).T
             magnitude = tf.vnorm(torque)
-            if self._marker_start is None:
-                self._marker_start = self._axis_x * magnitude / 20
-            self._marker_phase += math.pi / 36
-            marker_end = (self._axis_x * math.cos(self._marker_phase) +
-                          self._axis_y * math.sin(self._marker_phase)) * magnitude / 20
+            if self._mk_start is None:
+                self._mk_start = self._axis_x * magnitude / 20
+            self._mk_phase += math.pi / 36
+            marker_end = (self._axis_x * math.cos(self._mk_phase) +
+                          self._axis_y * math.sin(self._mk_phase)
+                          ) * magnitude / 20
 
-            marker_info = dict(lineFromXYZ=copy.deepcopy(self._marker_start),
-                               lineToXYZ=marker_end)
-            self._marker_start = marker_end
+            marker_info = dict(
+                lineFromXYZ=copy.deepcopy(self._mk_start),
+                lineToXYZ=marker_end
+            )
+            self._mk_start = marker_end
             return marker_info
 
 
@@ -152,7 +155,8 @@ class ExtraViewerHook(ViewerHook):
                     **self._torque_vis.update(perturb[3:]),
                     lineColorRGB=(0., 0., 1.),
                     lineWidth=5, lifeTime=0.1,
-                    parentObjectUniqueId=robot.id)
+                    parentObjectUniqueId=robot.id
+                )
 
                 self._last_perturb = perturb
 

@@ -1,3 +1,4 @@
+import collections
 import math
 import sys
 import time
@@ -10,7 +11,7 @@ import qdpgym.tasks.loct.reward as all_rewards
 from qdpgym.sim.abc import Quadruped, Environment, QuadrupedHandle, Hook, ComposedObs
 from qdpgym.sim.common.tg import TgStateMachine, vertical_tg
 from qdpgym.sim.task import BasicTask
-from qdpgym.utils import tf, log
+from qdpgym.utils import tf, log, PadWrapper
 
 
 class LocomotionV0(BasicTask):
@@ -28,9 +29,11 @@ class LocomotionV0(BasicTask):
         self._bias: Optional[np.ndarray] = None
         self._action_weights = np.array((0.2, 0.2, 0.1) * 4)
 
+        self._target_history = collections.deque(maxlen=10)
+
     @property
     def cmd(self):
-        return self._cmd
+        return self._cmd.copy()
 
     @cmd.setter
     def cmd(self, value):
@@ -39,6 +42,10 @@ class LocomotionV0(BasicTask):
     @property
     def np_random(self):
         return self._env.np_random
+
+    @property
+    def target_history(self):
+        return PadWrapper(self._target_history)
 
     def register_env(self, robot, env):
         super().register_env(robot, env)
@@ -58,6 +65,7 @@ class LocomotionV0(BasicTask):
         self._traj_gen.update()
         priori = self._traj_gen.get_priori_trajectory().reshape(4, 3)
         des_pos = action.reshape(4, 3) + priori
+        self._target_history.append(des_pos)
         des_joint_pos = []
         for i, pos in enumerate(des_pos):
             des_joint_pos.append(self._robot.inverse_kinematics(i, pos))
@@ -393,11 +401,10 @@ class LocomotionSimple(LocomotionV0):
 #         ))
 
 
-class RandomCommandSetterHook(Hook):
+class RandomCommanderHookV0(Hook):
     def __init__(self):
         self._task: Optional[LocomotionV0] = None
         self._stop_prob = 0.2
-        self._forward_prob = 0.05
         self._interval_range = (0.5, 5.)
         self._interval = 0
         self._last_update = 0
@@ -410,8 +417,6 @@ class RandomCommandSetterHook(Hook):
         cmd_choice = random_state.random()
         if cmd_choice < self._stop_prob:
             return np.array((0., 0., angular_cmd))
-        elif cmd_choice < self._stop_prob + self._forward_prob:
-            return np.array((1., 0., angular_cmd))
         else:
             yaw = random_state.uniform(0, math.tau)
             return np.array((math.cos(yaw), math.sin(yaw), angular_cmd))
@@ -427,6 +432,22 @@ class RandomCommandSetterHook(Hook):
             self._task.cmd = self.get_random_cmd(random)
             self._last_update = env.sim_time
             self._interval = random.uniform(*self._interval_range)
+
+
+class RandomCommanderHookV1(RandomCommanderHookV0):
+    def get_random_cmd(self, random_state):
+        angular_cmd = random_state.uniform(-1., 1.)
+        cmd_choice = random_state.random()
+        if cmd_choice < self._stop_prob:
+            return np.array((0., 0., angular_cmd))
+        else:
+            yaw = random_state.uniform(0, 2 * np.pi)
+            mag = random_state.random()
+            return np.array((
+                math.cos(yaw) * mag,
+                math.sin(yaw) * mag,
+                angular_cmd
+            ))
 
 
 class GamepadCommanderHook(Hook):

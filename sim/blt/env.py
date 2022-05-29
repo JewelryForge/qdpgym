@@ -14,14 +14,17 @@ from qdpgym.utils import PadWrapper, tf
 
 
 class QuadrupedEnv(Environment):
+    _observation_space = None
+    _action_space = None
+
     def __init__(
-            self,
-            robot: Aliengo,
-            arena: TerrainBase,
-            task: Task,
-            timestep: float = 2e-3,
-            time_limit: float = 20,
-            num_substeps=10
+        self,
+        robot: Aliengo,
+        arena: TerrainBase,
+        task: Task,
+        timestep: float = 2e-3,
+        time_limit: float = 20,
+        num_substeps=10
     ):
         self._robot = robot
         self._arena = arena
@@ -47,15 +50,21 @@ class QuadrupedEnv(Environment):
 
     @property
     def observation_space(self) -> gym.Space:
-        if hasattr(self._task, 'observation_space'):
-            return self._task.observation_space
-        return gym.Space()
+        if self._observation_space is None:
+            if hasattr(self._task, 'observation_space'):
+                self._observation_space = self._task.observation_space
+            else:
+                self._observation_space = gym.Space()
+        return self._observation_space
 
     @property
     def action_space(self):
-        if hasattr(self._task, 'action_space'):
-            return self._task.action_space
-        return gym.Space((12,), float)
+        if self._action_space is None:
+            if hasattr(self._task, 'action_space'):
+                self._action_space = self._task.action_space
+            else:
+                self._action_space = gym.Space((12,), float)
+        return self._action_space
 
     def set_render(self, flag=True):
         self._render = flag
@@ -64,10 +73,10 @@ class QuadrupedEnv(Environment):
         return super().render(mode)
 
     def reset(
-            self,
-            seed: Optional[int] = None,
-            return_info: bool = False,
-            options: Optional[dict] = None,
+        self,
+        seed: Optional[int] = None,
+        return_info: bool = False,
+        options: Optional[dict] = None,
     ) -> Union[Any, Tuple[Any, dict]]:
 
         super().reset(seed=seed, return_info=return_info, options=options)

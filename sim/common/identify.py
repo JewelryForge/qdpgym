@@ -9,10 +9,10 @@ class ActuatorNet(nn.Module):
     activation = nn.Softsign
 
     def __init__(
-            self,
-            input_dim=6,
-            output_dim=1,
-            hidden_dims=(32, 32, 32)
+        self,
+        input_dim=6,
+        output_dim=1,
+        hidden_dims=(32, 32, 32)
     ):
         super().__init__()
         layers = []

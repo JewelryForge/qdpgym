@@ -19,33 +19,48 @@ class QuadrupedHandle(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def get_base_pos(self) -> np.ndarray:
+        """Get base position in WORLD frame"""
         raise NotImplementedError
 
     def get_base_orn(self) -> np.ndarray:
+        """Get base quaternion in [x, y, z, w]"""
         raise NotImplementedError
 
     def get_base_rot(self) -> np.ndarray:
+        """Get base 3x3 rotation matrix to WORLD frame"""
         raise NotImplementedError
 
     def get_base_rpy(self) -> np.ndarray:
+        """
+        Get base Tait–Bryan angles in z-y-x
+        @return: np.ndarray: [roll, pitch, yaw]
+        """
         raise NotImplementedError
 
     def get_base_rpy_rate(self) -> np.ndarray:
+        """
+        Get the rate of base rpy (not angular velocity)
+        """
         raise NotImplementedError
 
     def get_base_lin(self) -> np.ndarray:
+        """Get base linear velocity in WORLD frame"""
         raise NotImplementedError
 
     def get_base_ang(self) -> np.ndarray:
+        """Get base angular velocity in WORLD frame"""
         raise NotImplementedError
 
     def get_velocimeter(self) -> np.ndarray:
+        """Get base linear velocity in BASE frame"""
         raise NotImplementedError
 
     def get_gyro(self) -> np.ndarray:
+        """Get base angular velocity in BASE frame"""
         raise NotImplementedError
 
     def get_accelerometer(self) -> np.ndarray:
+        """Get base acceleration in BASE frame"""
         raise NotImplementedError
 
     def get_state_history(self, latency):
