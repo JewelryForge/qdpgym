@@ -51,16 +51,20 @@ class LocomotionV0(BasicTask):
         super().register_env(robot, env)
         robot.set_latency(0., 0.03)
         robot.set_random_dynamics(True)
-        self._traj_gen = TgStateMachine(env.timestep * env.num_substeps,
-                                        self.np_random, vertical_tg(0.12))
+        self._traj_gen = TgStateMachine(
+            env.timestep * env.num_substeps,
+            self.np_random,
+            vertical_tg(0.12)
+        )
         self._build_weights_and_bias()
 
     def init_episode(self):
         self._robot.set_init_pose(yaw=self._env.np_random.random() * 2 * np.pi)
+        self._traj_gen.reset()
         super().init_episode()
 
     def before_step(self, action):
-        action = super().before_step(action)
+        super().before_step(action)
         action = action * self._action_weights
         self._traj_gen.update()
         priori = self._traj_gen.get_priori_trajectory().reshape(4, 3)
@@ -141,10 +145,10 @@ class LocomotionV0(BasicTask):
         x, y, _ = self._robot.get_base_pos()
         rel_h = self._env.get_relative_robot_height()
         if (
-                rel_h < self._robot.STANCE_HEIGHT * 0.5 or
-                rel_h > self._robot.STANCE_HEIGHT * 1.5 or
-                r < -np.pi / 3 or r > np.pi / 3 or
-                self._robot.get_torso_contact()
+            rel_h < self._robot.STANCE_HEIGHT * 0.5 or
+            rel_h > self._robot.STANCE_HEIGHT * 1.5 or
+            r < -np.pi / 3 or r > np.pi / 3 or
+            self._robot.get_torso_contact()
         ):
             return True
         return False
@@ -302,6 +306,39 @@ class LocomotionSimple(LocomotionV0):
             stance_cfg,  # joint target history
             (self._traj_gen.base_frequency,)  # tg base freq
         ))
+
+
+class LocomotionPMTG(LocomotionV0):
+    action_space = gym.spaces.Box(low=-1., high=1., shape=(16,))
+
+    def __init__(self):
+        super().__init__()
+        self._freq_weights = np.array((1.,) * 4)
+
+    def register_env(self, robot, env):
+        super().register_env(robot, env)
+        robot.set_latency(0., 0.03)
+        robot.set_random_dynamics(True)
+        self._traj_gen = TgStateMachine(
+            env.timestep * env.num_substeps,
+            self.np_random,
+            vertical_tg(0.12),
+            # 'random'
+        )
+        self._build_weights_and_bias()
+
+    def before_step(self, action):
+        super(LocomotionV0, self).before_step(action)
+        foot_pos_res = action[4:] * self._action_weights
+        freq_offset = action[:4] * self._freq_weights
+        self._traj_gen.update(freq_offset)
+        priori = self._traj_gen.get_priori_trajectory().reshape(4, 3)
+        des_foot_pos = foot_pos_res.reshape(4, 3) + priori
+        self._target_history.append(des_foot_pos)
+        des_joint_pos = []
+        for i, pos in enumerate(des_foot_pos):
+            des_joint_pos.append(self._robot.inverse_kinematics(i, pos))
+        return np.concatenate(des_joint_pos)
 
 
 # class LocomotionV0Raw(LocomotionV0):

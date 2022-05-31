@@ -285,7 +285,11 @@ class Aliengo(Quadruped):
         self._state_history.append(self._state)
 
         # self._motor.update_observation(self._state.joints_pos, self._state.joints_vel)
-        self._motor.update_observation(self.noisy.get_joint_pos(), self.noisy.get_joint_vel())
+        if self._noisy_on:
+            n = self._noisy.not_delayed
+            self._motor.update_observation(n.joint_pos, n.joint_vel)
+        else:
+            self._motor.update_observation(s.joint_pos, s.joint_vel)
 
         l = self._locom
         l.time += 1 / self._freq

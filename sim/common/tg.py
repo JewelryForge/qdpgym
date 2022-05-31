@@ -34,7 +34,9 @@ def vertical_tg(h=0.12):  # 0.2 in paper
 
 
 class PhaseRoller(object):
-    INIT_PHASES = (0.0, -np.pi, -np.pi, 0.0)
+    TROT = (0.0, -np.pi, -np.pi, 0.0)
+    WALK = (0.0, -np.pi / 2, -np.pi, -np.pi * 3 / 2)
+    PACE = (0.0, -np.pi, 0.0, -np.pi)
     base_frequency = 2.0  # TODO: COMPLETE THE STATE MACHINE
 
     class InitType(enum.IntEnum):
@@ -42,7 +44,7 @@ class PhaseRoller(object):
         SYMMETRIC = 1
         RANDOM = 2
 
-    def __init__(self, time_step, random_state, init_type='symmetric'):
+    def __init__(self, time_step, random_state, init_type='random'):
         self._time_step = time_step
         self._random = random_state
         self._init_type = self._check_init_type(init_type)
@@ -72,9 +74,9 @@ class PhaseRoller(object):
 
     def _get_init_phases(self):
         if self._init_type == self.InitType.FIXED:
-            return np.array(self.INIT_PHASES, dtype=np.float32)
+            return np.array(self.TROT, dtype=np.float32)
         elif self._init_type == self.InitType.SYMMETRIC:
-            return np.array(self.random_symmetric(self.INIT_PHASES), dtype=np.float32)
+            return np.array(self.random_symmetric(self.TROT), dtype=np.float32)
         elif self._init_type == self.InitType.RANDOM:
             return self._random.uniform(-np.pi, np.pi, 4).astype(np.float32)
 
@@ -107,9 +109,15 @@ class PhaseRoller(object):
 
 
 class TgStateMachine(PhaseRoller):
-    def __init__(self, time_step, random_state, traj_gen,
-                 freq_bounds=(0.5, 3.0)):
-        super().__init__(time_step, random_state)
+    def __init__(
+        self,
+        time_step,
+        random_state,
+        traj_gen,
+        init_type='symmetric',
+        freq_bounds=(0.5, 3.0)
+    ):
+        super().__init__(time_step, random_state, init_type)
         self._freq_bounds = freq_bounds
         self._traj_gen = traj_gen
 

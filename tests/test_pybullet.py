@@ -4,16 +4,14 @@ import time
 import numpy as np
 import pybullet as pyb
 import pybullet_data
-import torch
 
 from qdpgym.sim.blt.env import QuadrupedEnv
 from qdpgym.sim.blt.hooks import ViewerHook
 from qdpgym.sim.blt.quadruped import Aliengo
 from qdpgym.sim.blt.terrain import Plain, Hills, Slopes, Steps, PlainHf
 from qdpgym.sim.task import NullTask
-from qdpgym.tasks.loct import LocomotionV0
+from qdpgym.tasks.loct import LocomotionV0, LocomotionPMTG
 from qdpgym.utils import tf
-from qdpgym.utils.parallel import ParallelWrapper
 
 
 def test_robot():
@@ -44,6 +42,17 @@ def test_env():
     env.reset()
     for _ in range(1000):
         env.step(rob.STANCE_CONFIG)
+
+
+def test_tg():
+    rob = Aliengo(500, 'actuator_net', True)
+    arena = Plain()
+    task = LocomotionPMTG()
+    task.add_hook(ViewerHook())
+    env = QuadrupedEnv(rob, arena, task)
+    env.reset()
+    for _ in range(1000):
+        env.step(np.zeros(16))
 
 
 def test_replaceHeightfield():
@@ -103,7 +112,7 @@ def test_terrainApi():
                 box_id, peak, (0., 0., 0., 1.)
             )
         for idx, (x, y) in enumerate(
-                itertools.product(np.linspace(-1, 1, 10), np.linspace(-1, 1, 10))
+            itertools.product(np.linspace(-1, 1, 10), np.linspace(-1, 1, 10))
         ):
             h = terrain.get_height(x, y)
             vec_orn = tf.Quaternion.from_rotation(
@@ -140,35 +149,6 @@ def test_terrainApi():
         terrain = new
 
     pyb.disconnect()
-
-
-def test_parallel():
-    def make_env():
-        rob = Aliengo(500, 'pd')
-        arena = Plain()
-        task = LocomotionV0()
-        return QuadrupedEnv(rob, arena, task)
-
-    env = ParallelWrapper(make_env, 4)
-    env.init_episode()
-    for _ in range(10):
-        obs = env.step(torch.zeros(4, 12))
-        print(obs)
-
-
-def test_parallel_composed_obs():
-    def make_env():
-        rob = Aliengo(500, 'pd')
-        arena = Plain()
-        task = LocomotionV0()
-        return QuadrupedEnv(rob, arena, task)
-
-    env = ParallelWrapper(make_env, 4)
-    env.init_episode()
-    for _ in range(10):
-        step = env.step(torch.zeros(4, 12))
-        obs, rew, done, info = step
-        print(rew, done, info)
 
 
 def test_gym_env():

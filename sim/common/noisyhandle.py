@@ -37,6 +37,12 @@ class NoisyHandle(QuadrupedHandle):
     def cmd_history(self):
         return self._robot.cmd_history
 
+    @property
+    def not_delayed(self):
+        if self._obs_buffer:
+            return self._obs_buffer[-1]
+        return self._obs
+
     def update_observation(self, state: Snapshot, random_state):
         """Add noise on observation"""
         add_noise = random_state.normal
