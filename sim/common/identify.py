@@ -23,7 +23,7 @@ class ActuatorNet(nn.Module):
             input_dim = dim
         layers.append(nn.Linear(input_dim, output_dim))
         self.layers = nn.Sequential(*layers)
-        self.device = torch.device('cuda')
+        self.device = torch.device('cpu')
 
     def forward(self, state):
         return self.layers(state)

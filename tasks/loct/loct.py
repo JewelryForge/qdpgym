@@ -27,7 +27,7 @@ class LocomotionV0(BasicTask):
 
         self._weights: Optional[np.ndarray] = None
         self._bias: Optional[np.ndarray] = None
-        self._action_weights = np.array((0.2, 0.2, 0.1) * 4)
+        self._action_weights = np.array((0.3, 0.2, 0.1) * 4)
 
         self._target_history = collections.deque(maxlen=10)
 

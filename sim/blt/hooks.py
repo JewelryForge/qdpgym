@@ -26,7 +26,7 @@ class ViewerHook(Hook):
         self._last_frame_time = time.time()
 
     def initialize(self, robot, env):
-        env.set_render()
+        env.render()
 
     def init_episode(self, robot, env):
         self._robot_yaw_buffer.clear()
@@ -86,7 +86,7 @@ class ViewerHook(Hook):
                 yaw = Angle.norm(yaw - math.pi / 2)
                 degree = 0.
             sim_env.resetDebugVisualizerCamera(1.5, Angle.to_deg(yaw), degree, (x, y, z))
-        env.sim_env.configureDebugVisualizer(pyb.COV_ENABLE_SINGLE_STEP_RENDERING, True)
+        env.render()
 
         KEY_SPACE = ord(' ')
         if self.is_triggered(KEY_SPACE, kbd_events):
@@ -138,7 +138,6 @@ class ExtraViewerHook(ViewerHook):
         self._torque_vis = _TorqueVisualizerHelper()
 
     def after_step(self, robot, env):
-        super().after_step(robot, env)
         sim_env = env.sim_env
         if self._show_perturb:
             perturb = env.get_perturbation(in_robot_frame=True)
@@ -159,6 +158,7 @@ class ExtraViewerHook(ViewerHook):
                 )
 
                 self._last_perturb = perturb
+        super().after_step(robot, env)
 
 
 class RandomTerrainHook(Hook):

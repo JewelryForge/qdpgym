@@ -58,7 +58,7 @@ class QuadrupedEnv(Environment):
         return self._observation_space
 
     @property
-    def action_space(self):
+    def action_space(self) -> gym.Space:
         if self._action_space is None:
             if hasattr(self._task, 'action_space'):
                 self._action_space = self._task.action_space
@@ -66,11 +66,15 @@ class QuadrupedEnv(Environment):
                 self._action_space = gym.Space((12,), float)
         return self._action_space
 
-    def set_render(self, flag=True):
-        self._render = flag
-
     def render(self, mode="human"):
-        return super().render(mode)
+        if mode == 'human':
+            self._render = True
+            if self._sim_env is not None:
+                self._sim_env.configureDebugVisualizer(
+                    pyb.COV_ENABLE_SINGLE_STEP_RENDERING, True
+                )
+        else:
+            return super().render(mode)
 
     def reset(
         self,
