@@ -100,9 +100,12 @@ class RewardRegistry(object):
     def register_task(self, robot, env, task):
         self._robot, self._env, self._task = robot, env, task
 
-    def add_reward(self, name: str,
-                   reward_obj: Callable[..., float],
-                   weight: float):
+    def add_reward(
+        self,
+        name: str,
+        reward_obj: Callable[..., float],
+        weight: float
+    ):
         if name in self._rewards_set:
             raise RuntimeError(f'Duplicated Reward Type {name}')
         self._rewards_set.add(name)

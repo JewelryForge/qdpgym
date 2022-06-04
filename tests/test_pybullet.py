@@ -32,6 +32,31 @@ def test_robot():
 
     pyb.disconnect()
 
+def test_robot_extent():
+    pyb.connect(pyb.GUI)
+    pyb.setTimeStep(2e-3)
+    pyb.setAdditionalSearchPath(pybullet_data.getDataPath())
+    Plain().spawn(pyb)
+    rob = Aliengo(500, 'pd')
+    rob.spawn_on_rack(pyb, np.random)
+    pyb.setGravity(0, 0, -9.8)
+
+    joint_pos = np.concatenate((
+        rob.inverse_kinematics(0, (0.3, 0., 0.05)),
+        rob.inverse_kinematics(0, (0.35, 0., 0.1)),
+        rob.inverse_kinematics(0, (0.25, 0., 0.)),
+        rob.inverse_kinematics(0, (-0.25, 0., 0.)),
+    ))
+
+    for _ in range(1000):
+        pyb.stepSimulation()
+        rob.update_observation(np.random)
+
+        rob.apply_command(joint_pos)
+        time.sleep(0.002)
+
+    pyb.disconnect()
+
 
 def test_env():
     rob = Aliengo(500, 'pd')
@@ -78,8 +103,8 @@ def test_terrainApi():
     pyb.connect(pyb.GUI)
     pyb.setRealTimeSimulation(True)
     terrain = Hills.make(20, 0.1, (0.5, 10), random_state=np.random)
-    # terrain = StepsBt.make(20, 0.1, 1.0, 0.5, random_state=np.random)
-    # terrain = SlopesBt.make(20, 0.1, np.pi / 6, 0.5)
+    # terrain = Steps.make(20, 0.1, 1.0, 0.5, random_state=np.random)
+    # terrain = Slopes.make(20, 0.1, np.pi / 6, 0.5)
     terrain.spawn(pyb)
 
     sphere_shape = pyb.createVisualShape(
@@ -158,3 +183,7 @@ def test_gym_env():
     env = QuadrupedEnv(rob, arena, task)
     print(env.observation_space)
     print(env.action_space)
+
+
+if __name__ == '__main__':
+    test_robot_extent()

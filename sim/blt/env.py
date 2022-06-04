@@ -276,15 +276,19 @@ class QuadrupedEnv(Environment):
     def _apply_perturbation(self):
         if self._perturbation is not None:
             self._applied_link_id = 0
-            self._sim_env.applyExternalForce(objectUniqueId=self._robot.id,
-                                             linkIndex=self._applied_link_id,
-                                             forceObj=self._perturbation[:3],
-                                             posObj=self._robot.get_base_pos(),
-                                             flags=pyb.WORLD_FRAME)
-            self._sim_env.applyExternalTorque(objectUniqueId=self._robot.id,
-                                              linkIndex=self._applied_link_id,
-                                              torqueObj=self._perturbation[3:],
-                                              flags=pyb.WORLD_FRAME)
+            self._sim_env.applyExternalForce(
+                objectUniqueId=self._robot.id,
+                linkIndex=self._applied_link_id,
+                forceObj=self._perturbation[:3],
+                posObj=self._robot.get_base_pos(),
+                flags=pyb.WORLD_FRAME
+            )
+            self._sim_env.applyExternalTorque(
+                objectUniqueId=self._robot.id,
+                linkIndex=self._applied_link_id,
+                torqueObj=self._perturbation[3:],
+                flags=pyb.WORLD_FRAME
+            )
 
     def _check_debug_reset_param(self):
         if self._debug_reset_param != -1:

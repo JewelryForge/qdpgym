@@ -9,6 +9,11 @@ from scipy.interpolate import interp2d
 from qdpgym.sim.abc import Terrain, NUMERIC
 from qdpgym.utils.tf import vcross, vunit
 
+__all__ = [
+    'NullTerrain', 'Plain', 'HeightFieldTerrain',
+    'Hills', 'PlainHf', 'Slopes', 'Steps', 'TerrainBase'
+]
+
 
 class TerrainBase(Terrain, metaclass=abc.ABCMeta):
     def __init__(self):
@@ -78,12 +83,15 @@ class HeightFieldTerrain(TerrainBase):
         if self._id != -1:
             return
         self._shape_id = sim_env.createCollisionShape(
-            shapeType=pyb.GEOM_HEIGHTFIELD, flags=pyb.GEOM_CONCAVE_INTERNAL_EDGE,
+            shapeType=pyb.GEOM_HEIGHTFIELD,
+            flags=pyb.GEOM_CONCAVE_INTERNAL_EDGE,
             meshScale=(self.x_rsl, self.y_rsl, 1.0),
             heightfieldTextureScaling=self.x_size,
             heightfieldData=self.heightfield.reshape(-1),
-            numHeightfieldColumns=self.x_dim, numHeightfieldRows=self.y_dim,
-            replaceHeightfieldIndex=-1)
+            numHeightfieldColumns=self.x_dim,
+            numHeightfieldRows=self.y_dim,
+            replaceHeightfieldIndex=-1
+        )
         self._id = sim_env.createMultiBody(0, self._shape_id)
         sim_env.changeVisualShape(self._id, -1, rgbaColor=(1, 1, 1, 1))
         sim_env.changeDynamics(self._id, -1, lateralFriction=1.0)
@@ -110,7 +118,8 @@ class HeightFieldTerrain(TerrainBase):
             heightfieldTextureScaling=self.x_size,
             heightfieldData=self.heightfield.reshape(-1),
             numHeightfieldColumns=self.x_dim, numHeightfieldRows=self.y_dim,
-            replaceHeightfieldIndex=obj._shape_id)
+            replaceHeightfieldIndex=obj._shape_id
+        )
         obj._id = obj._shape_id = -1
 
         origin_z = (np.max(self.heightfield) + np.min(self.heightfield)) / 2
@@ -154,11 +163,11 @@ class HeightFieldTerrain(TerrainBase):
         (x_lower, x_upper), (y_lower, y_upper) = x_range, y_range
         x_lower_idx, x_upper_idx = self.get_disc_x(x_lower), self.get_disc_x(x_upper) + 1
         y_lower_idx, y_upper_idx = self.get_disc_y(y_lower), self.get_disc_y(y_upper) + 1
-        height_field_part = self.heightfield[y_lower_idx:y_upper_idx, x_lower_idx:x_upper_idx]
-        y_size, x_size = height_field_part.shape
-        max_idx = np.argmax(height_field_part)
+        hfield_part = self.heightfield[y_lower_idx:y_upper_idx, x_lower_idx:x_upper_idx]
+        y_size, x_size = hfield_part.shape
+        max_idx = np.argmax(hfield_part)
         max_x_idx, max_y_idx = max_idx % x_size, max_idx // x_size
-        max_height = height_field_part[max_y_idx, max_x_idx]
+        max_height = hfield_part[max_y_idx, max_x_idx]
         max_x, max_y = x_lower + max_x_idx * self.x_rsl, y_lower + max_y_idx * self.y_rsl
         return max_x, max_y, max_height
 
@@ -195,10 +204,10 @@ class Hills(HeightFieldTerrain):
 
     @classmethod
     def make(cls, size, resolution, *rough_dsp: Tuple[NUMERIC, NUMERIC], random_state):
-        return cls(cls.make_heightfield(size, resolution, *rough_dsp, random_state=random_state))
+        return cls(cls.make_hfield(size, resolution, *rough_dsp, random_state=random_state))
 
     @classmethod
-    def make_heightfield(cls, size, resol, *rough_dsp: Tuple[NUMERIC, NUMERIC], random_state) -> HeightField:
+    def make_hfield(cls, size, resol, *rough_dsp: Tuple[NUMERIC, NUMERIC], random_state) -> HeightField:
         data_size = int(size / resol) + 1
         hfield_data = np.zeros((data_size, data_size))
         for roughness, dsp in rough_dsp:
@@ -218,10 +227,10 @@ class Hills(HeightFieldTerrain):
 class PlainHf(HeightFieldTerrain):
     @classmethod
     def make(cls, size, resolution):
-        return cls(cls.make_heightfield(size, resolution))
+        return cls(cls.make_hfield(size, resolution))
 
     @staticmethod
-    def make_heightfield(size, resolution):
+    def make_hfield(size, resolution):
         data_size = int(size / resolution) + 1
         hfield_data = np.zeros((data_size, data_size))
         return HeightField(hfield_data, size, resolution)
@@ -243,10 +252,10 @@ class PlainHf(HeightFieldTerrain):
 class Slopes(HeightFieldTerrain):
     @classmethod
     def make(cls, size, resolution, slope, slope_width, axis='x'):
-        return cls(cls.make_heightfield(size, resolution, slope, slope_width, axis))
+        return cls(cls.make_hfield(size, resolution, slope, slope_width, axis))
 
     @classmethod
-    def make_heightfield(cls, size, resolution, slope, slope_width, axis):
+    def make_hfield(cls, size, resolution, slope, slope_width, axis):
         step = int(slope_width * 2 / resolution)
         data_size = int(size / resolution) + 1
         num_steps = int(data_size / step) + 1
@@ -280,10 +289,10 @@ class Slopes(HeightFieldTerrain):
 class Steps(HeightFieldTerrain):
     @classmethod
     def make(cls, size, resolution, step_width, max_step_height, random_state):
-        return cls(cls.make_heightfield(size, resolution, step_width, max_step_height, random_state))
+        return cls(cls.make_hfield(size, resolution, step_width, max_step_height, random_state))
 
     @staticmethod
-    def make_heightfield(size, resolution, step_width, max_step_height, random_state):
+    def make_hfield(size, resolution, step_width, max_step_height, random_state):
         step = int(step_width / resolution)
         data_size = int(size / resolution) + 1
         num_steps = int(data_size / step) + 1

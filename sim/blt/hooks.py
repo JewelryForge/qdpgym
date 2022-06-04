@@ -161,32 +161,65 @@ class ExtraViewerHook(ViewerHook):
         super().after_step(robot, env)
 
 
+class HeightSampleVisualizer(Hook):
+    def __init__(self):
+        super().__init__()
+        self._terrain_visual_shape = -1
+        self._terrain_markers = None
+
+    def init_episode(self, robot, env):
+        if self._terrain_markers is None:
+            sim_env = env.sim_env
+            self._terrain_visual_shape = sim_env.createVisualShape(
+                shapeType=pyb.GEOM_SPHERE, radius=0.01, rgbaColor=(0., 0.8, 0., 0.6))
+            self._terrain_markers = [
+                sim_env.createMultiBody(
+                    baseVisualShapeIndex=self._terrain_visual_shape
+                ) for _ in range(121)
+            ]
+
+    def after_step(self, robot, env):
+        sim_env = env.sim_env
+        rx, ry, _ = robot.get_base_pos()
+        yaw = robot.get_base_rpy()[2]
+        cy, sy = math.cos(yaw), math.sin(yaw)
+        dx, dy = np.array(((cy, sy), (-sy, cy))) * 0.15
+
+        marker = iter(self._terrain_markers)
+        for i in range(-5, 6):
+            for j in range(-5, 6):
+                x, y = (rx, ry) + i * dx + j * dy
+                height = env.arena.get_height(x, y)
+                sim_env.resetBasePositionAndOrientation(
+                    next(marker), (x, y, height), (0., 0., 0., 1.)
+                )
+
+
 class RandomTerrainHook(Hook):
     def __init__(self):
         self.max_roughness = 0.2
         self.max_slope = 10 / 180 * math.pi
         self.max_step_height = 0.1
 
-    def generate_terrain(self, random_state):
+    def generate_terrain(self, random_gen: np.random.Generator):
         """
-        If no terrain has been spawned, create and spawn it.
-        Otherwise, update its height field.
+        Generate a random terrain object of Hills, Slopes, Steps or Plain.
         """
         size, resolution = 30, 0.1
-        terrain_type = random_state.randint(4)
-        difficulty = random_state.random()
+        terrain_type = random_gen.integers(4)
+        difficulty = random_gen.random()
         terrain = None
         if terrain_type == 0:
             roughness = self.max_roughness * difficulty
             terrain = Hills.make(size, resolution, (roughness, 20),
-                                 random_state=random_state)
+                                 random_state=random_gen)
         elif terrain_type == 1:
             slope = self.max_slope * difficulty
-            axis = random_state.choice(('x', 'y'))
+            axis = random_gen.choice(('x', 'y'))
             terrain = Slopes.make(size, resolution, slope, 3., axis)
         elif terrain_type == 2:
             step_height = self.max_step_height * difficulty
-            terrain = Steps.make(size, resolution, 1., step_height, random_state)
+            terrain = Steps.make(size, resolution, 1., step_height, random_gen)
         elif terrain_type == 3:
             terrain = PlainHf.make(size, resolution)
         return terrain
@@ -203,17 +236,17 @@ class RandomPerturbHook(Hook):
         self.interval = 0
         self.last_update = 0
 
-    def get_random_perturb(self, random_state):
-        horizontal_force = random_state.uniform(0, self.force_magnitude[0])
-        vertical_force = random_state.uniform(0, self.force_magnitude[1])
-        yaw = random_state.uniform(0, 2 * math.pi)
+    def get_random_perturb(self, random_gen):
+        horizontal_force = random_gen.uniform(0, self.force_magnitude[0])
+        vertical_force = random_gen.uniform(0, self.force_magnitude[1])
+        yaw = random_gen.uniform(0, 2 * math.pi)
         external_force = np.array((
             horizontal_force * np.cos(yaw),
             horizontal_force * np.sin(yaw),
-            vertical_force * random_state.choice((-1, 1))
+            vertical_force * random_gen.choice((-1, 1))
         ))
 
-        external_torque = random_state.uniform(-self.torque_magnitude, self.torque_magnitude)
+        external_torque = random_gen.uniform(-self.torque_magnitude, self.torque_magnitude)
         return external_force, external_torque
 
     def before_substep(self, robot, env):

@@ -241,9 +241,39 @@ class Aliengo(Quadruped):
         if self._noisy_on and self._latency_range is not None:
             self._noisy.latency = random_state.uniform(*self._latency_range)
 
-        self._state = None
+        self._state = self._cmd = None
         self._state_history.clear()
-        self._cmd = None
+        self._cmd_history.clear()
+        self._locom = Aliengo.LocomotionInfo()
+        if self._noisy is not None:
+            self._noisy.reset()
+
+    def spawn_on_rack(self, sim_env, random_state):
+        self._sim_env = sim_env
+
+        # flags = pyb.URDF_USE_SELF_COLLISION if self._self_collision else 0
+        assert self._body_id == -1
+        self._body_id, self._motor_ids, self._foot_ids = \
+            self._model.spawn(
+                self._sim_env,
+                ((0., 0., 1.), (0., 0., 0., 1.))
+            )
+        self._model.init_episode_dynamics(sim_env)
+        self._configure_joints(self.STANCE_CONFIG)
+
+        sim_env.createConstraint(
+            self._body_id, -1, -1, -1,
+            jointType=pyb.JOINT_FIXED,
+            jointAxis=(0., 0., 0.),
+            parentFramePosition=(0., 0., 0.),
+            childFramePosition=(0., 0., 1.)
+        )
+
+        if self._noisy_on and self._latency_range is not None:
+            self._noisy.latency = random_state.uniform(*self._latency_range)
+
+        self._state = self._cmd = None
+        self._state_history.clear()
         self._cmd_history.clear()
         self._locom = Aliengo.LocomotionInfo()
         if self._noisy is not None:
@@ -295,7 +325,7 @@ class Aliengo(Quadruped):
         l.time += 1 / self._freq
         rolling_vel = s.joint_vel[((1, 4, 7, 10),)] + s.joint_vel[((2, 5, 8, 11),)]
         for i, (contact, foot_pos, rv) in enumerate(
-                zip(s.leg_contacts[((2, 5, 8, 11),)], s.foot_pos, rolling_vel)
+            zip(s.leg_contacts[((2, 5, 8, 11),)], s.foot_pos, rolling_vel)
         ):
             if not contact:
                 l.strides[i] = (0., 0.)

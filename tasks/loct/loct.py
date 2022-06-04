@@ -59,7 +59,9 @@ class LocomotionV0(BasicTask):
         self._build_weights_and_bias()
 
     def init_episode(self):
-        self._robot.set_init_pose(yaw=self._env.np_random.random() * 2 * np.pi)
+        self._robot.set_init_pose(
+            yaw=self._env.np_random.random() * 2 * np.pi
+        )
         self._traj_gen.reset()
         super().init_episode()
 
