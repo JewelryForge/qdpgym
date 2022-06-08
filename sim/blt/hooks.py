@@ -141,23 +141,26 @@ class ExtraViewerHook(ViewerHook):
         sim_env = env.sim_env
         if self._show_perturb:
             perturb = env.get_perturbation(in_robot_frame=True)
-            if perturb is not None and (self._last_perturb != perturb).any():
-                self._force_marker = sim_env.addUserDebugLine(
-                    lineFromXYZ=(0., 0., 0.),
-                    lineToXYZ=perturb[:3] / 50,
-                    lineColorRGB=(1., 0., 0.),
-                    lineWidth=3, lifeTime=1,
-                    parentObjectUniqueId=robot.id,
-                    replaceItemUniqueId=self._force_marker
-                )
-                sim_env.addUserDebugLine(
-                    **self._torque_vis.update(perturb[3:]),
-                    lineColorRGB=(0., 0., 1.),
-                    lineWidth=5, lifeTime=0.1,
-                    parentObjectUniqueId=robot.id
-                )
+            if perturb is None:
+                sim_env.removeUserDebugItem(self._force_marker)
+            else:
+                if (self._last_perturb != perturb).any():
+                    self._force_marker = sim_env.addUserDebugLine(
+                        lineFromXYZ=(0., 0., 0.),
+                        lineToXYZ=perturb[:3] / 50,
+                        lineColorRGB=(1., 0., 0.),
+                        lineWidth=3, lifeTime=1,
+                        parentObjectUniqueId=robot.id,
+                        replaceItemUniqueId=self._force_marker
+                    )
+                    sim_env.addUserDebugLine(
+                        **self._torque_vis.update(perturb[3:]),
+                        lineColorRGB=(0., 0., 1.),
+                        lineWidth=5, lifeTime=0.1,
+                        parentObjectUniqueId=robot.id
+                    )
 
-                self._last_perturb = perturb
+                    self._last_perturb = perturb
         super().after_step(robot, env)
 
 
@@ -230,6 +233,7 @@ class RandomTerrainHook(Hook):
 
 class RandomPerturbHook(Hook):
     def __init__(self):
+        self.perturb_prob = 0.5
         self.force_magnitude = np.array((20., 20.))
         self.torque_magnitude = np.array((2.5, 5., 5.))
         self.interval_range = (0.5, 2.0)
@@ -252,9 +256,15 @@ class RandomPerturbHook(Hook):
     def before_substep(self, robot, env):
         if env.sim_time >= self.last_update + self.interval:
             random = env.np_random
-            env.set_perturbation(np.concatenate(self.get_random_perturb(random)))
+            if random.random() < self.perturb_prob:
+                env.set_perturbation(np.concatenate(self.get_random_perturb(random)))
+            else:
+                env.set_perturbation(None)
             self.interval = random.uniform(*self.interval_range)
             self.last_update = env.sim_time
+
+    def init_episode(self, robot, env):
+        self.last_update = self.interval = 0
 
 
 class VideoRecorderHook(Hook):
