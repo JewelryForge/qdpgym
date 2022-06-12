@@ -24,7 +24,8 @@ class QuadrupedEnv(Environment):
         task: Task,
         timestep: float = 2e-3,
         time_limit: float = 20,
-        num_substeps=10
+        num_substeps: int = 10,
+        identifier: str = None,
     ):
         self._robot = robot
         self._arena = arena
@@ -32,13 +33,14 @@ class QuadrupedEnv(Environment):
         self._timestep = timestep
         self._time_limit = time_limit
         self._num_substeps = num_substeps
+        self._identifier = identifier or f'{hex(id(self))[-7:]}'
         self._step_freq = 1 / (self.timestep * self._num_substeps)
         self._render = False
 
         self._init = False
         self._elapsed_sim_steps = None
 
-        self._sim_env = None if True else pyb
+        self._sim_env = None if True else pyb  # for pylint
         self._reset_times, self._debug_reset_param = 0, -1
         self._task.register_env(self._robot, self)
         self._action_history = collections.deque(maxlen=10)
@@ -159,6 +161,10 @@ class QuadrupedEnv(Environment):
     def num_substeps(self):
         return self._num_substeps
 
+    @property
+    def identifier(self):
+        return self._identifier
+
     def step(self, action: ARRAY_LIKE):
         if self._check_debug_reset_param():
             return self.reset(), 0., True, {}
@@ -224,27 +230,6 @@ class QuadrupedEnv(Environment):
             return np.zeros(12)
         actions = [self._action_history[-i - 1] for i in range(3)]
         return (actions[0] - 2 * actions[1] + actions[2]) * self._step_freq ** 2
-
-    # def get_terrain_sample(self, x, y, yaw):
-    #     dx, dy = 0.1 * np.cos(yaw), 0.1 * np.sin(yaw)
-    #     points = ((dx - dy, dx + dy), (dx, dy), (dx + dy, -dx + dy),
-    #               (-dy, dx), (0, 0), (dy, -dx),
-    #               (-dx - dy, dx - dy), (-dx, -dy), (-dx + dy, -dx - dy))
-    #     samples = []
-    #     for dx, dy in points:
-    #         px, py = x + dx, y + dy
-    #         samples.append((px, py, self._arena.get_height(px, py)))
-    #     return samples
-    #
-    # def get_terrain_scan(self, x, y, yaw):
-    #     dx, dy = 0.1 * np.cos(yaw), 0.1 * np.sin(yaw)
-    #     points = ((dx - dy, dx + dy), (dx, dy), (dx + dy, -dx + dy),
-    #               (-dy, dx), (0, 0), (dy, -dx),
-    #               (-dx - dy, dx - dy), (-dx, -dy), (-dx + dy, -dx - dy))
-    #     scan = []
-    #     for dx, dy in points:
-    #         scan.append(self._arena.get_height(x + dx, y + dy))
-    #     return scan
 
     def get_relative_robot_height(self) -> float:
         return self._robot.get_base_pos()[2] - self._interact_terrain_height

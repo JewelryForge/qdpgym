@@ -1,6 +1,7 @@
 import abc
 import dataclasses
-from typing import Union
+import multiprocessing as mp
+from typing import Union, Type
 
 import gym
 import numpy as np
@@ -262,6 +263,23 @@ class Hook(metaclass=abc.ABCMeta):
 
     def on_fail(self, robot, env):
         pass
+
+
+class CommHook(Hook):
+    def __init__(self, comm: mp.Queue, *args, **kwargs):
+        self._comm = comm
+
+    def _submit(self, env_id, info):
+        self._comm.put({env_id, info})
+
+
+class CommHookFactory(object):
+    def __init__(self, cls: Type[CommHook]):
+        self._cls = cls
+        self._comm = mp.Queue()
+
+    def __call__(self, *args, **kwargs):
+        return self._cls(self._comm, *args, **kwargs)
 
 
 class Task(metaclass=abc.ABCMeta):
