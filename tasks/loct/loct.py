@@ -1,5 +1,6 @@
 import collections
 import math
+import queue
 import sys
 import time
 from typing import Optional
@@ -315,7 +316,7 @@ class LocomotionPMTG(LocomotionV0):
 
     def __init__(self):
         super().__init__()
-        self._freq_weights = np.array((1.,) * 4)
+        self._freq_weights = np.array((0.5,) * 4)
 
     def register_env(self, robot, env):
         super().register_env(robot, env)
@@ -487,6 +488,53 @@ class RandomCommanderHookV1(RandomCommanderHookV0):
                 math.sin(yaw) * mag,
                 angular_cmd
             ))
+
+
+class CommandRewardCollectorHook(CommHook):
+    def __init__(self, comm, reward_name):
+        self._reward_name = reward_name
+        super().__init__(comm)
+        self._task = None
+
+        self._cmd_buffer = None
+        self._reward_sum = 0.
+        self._counter = 0
+
+    def register_task(self, task):
+        self._task = task
+
+    def after_step(self, robot, env):
+        if np.array_equal(self._cmd_buffer, self._task.cmd):
+            self._counter += 1
+            _, reward_info = self._task.get_reward(detailed=True)
+            self._reward_sum += reward_info[self._reward_name]
+        else:
+            if self._cmd_buffer is not None and self._counter:
+                self._submit({
+                    'command': self._cmd_buffer,
+                    'reward': self._reward_sum / self._counter
+                })
+            self._cmd_buffer = self._task.cmd
+            self._reward_sum = 0.
+            self._counter = 0
+
+
+class CommandRewardAnalyser(CommHookFactory):
+    def __init__(self):
+        super().__init__(CommandRewardCollectorHook)
+        self._history = collections.deque(maxlen=500)
+
+    def analyse(self) -> np.ndarray:
+        try:
+            while True:
+                self._history.append(self._comm.get(block=False))
+        except queue.Empty:
+            pass
+        fig = np.zeros((400, 400))
+        for env_id, info in self._history:
+            coord = 200 + info['command'] * 150
+            fig[int(coord[0]), int(coord[1])] = info['reward']
+        return fig
 
 
 class GamepadCommanderHook(Hook):

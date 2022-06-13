@@ -214,6 +214,10 @@ class Environment(gym.Env, metaclass=abc.ABCMeta):
     def timestep(self):
         raise NotImplementedError
 
+    @property
+    def identifier(self):
+        raise NotImplementedError
+
     def get_action_rate(self) -> np.ndarray:
         raise NotImplementedError
 
@@ -266,11 +270,15 @@ class Hook(metaclass=abc.ABCMeta):
 
 
 class CommHook(Hook):
-    def __init__(self, comm: mp.Queue, *args, **kwargs):
+    def __init__(self, comm: mp.Queue):
         self._comm = comm
+        self._env_id: str = 'anonymous'
 
-    def _submit(self, env_id, info):
-        self._comm.put({env_id, info})
+    def initialize(self, robot, env):
+        self._env_id = env.identifier
+
+    def _submit(self, info):
+        self._comm.put((self._env_id, info))
 
 
 class CommHookFactory(object):

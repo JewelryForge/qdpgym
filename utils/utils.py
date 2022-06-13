@@ -11,7 +11,7 @@ import yaml
 
 __all__ = ['make_part', 'Angle', 'replace_is', 'replace_eq', 'colored_str', 'log',
            'MfTimer', 'get_padded', 'PadWrapper', 'get_timestamp', 'YamlLoader',
-           'print_return']
+           'print_return', 'AutoInc']
 
 
 class make_part(functools.partial):
@@ -335,3 +335,14 @@ def print_return(func):
         return ret
 
     return wrapper
+
+
+class AutoInc(object):
+    idx = -1
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        self.idx += 1
+        return self.idx

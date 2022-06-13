@@ -97,7 +97,7 @@ class UnifiedLinearReward(Reward):
         if (lin_cmd == 0.).all():
             return ort_pen
         proj_rew = self.reshape(self.get_desired_velocity(lin_cmd), proj_vel)
-        return ((1 - self.ort_weight) * proj_rew + self.ort_weight * ort_pen) * 1.5
+        return (1 - self.ort_weight) * proj_rew + self.ort_weight * ort_pen
 
     def get_desired_velocity(self, cmd):
         return self.coeff / math.hypot(self.lateral * cmd[0], self.forward * cmd[1])
